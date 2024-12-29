@@ -59,6 +59,54 @@ install_dependencies() {
     sleep 2
 }
 
+# Gestión del modo monitor
+enable_monitor_mode() {
+    clear_screen
+    echo -e "${BLUE}[+] Detectando interfaces inalámbricas...${NC}"
+    interfaces=$(iw dev | grep Interface | awk '{print $2}')
+
+    if [[ -z "$interfaces" ]]; then
+        echo -e "${RED}[-] No se encontraron tarjetas inalámbricas.${NC}"
+        sleep 2
+        return
+    fi
+
+    echo -e "${BLUE}[+] Interfaces detectadas:${NC}"
+    for iface in $interfaces; do
+        echo -e "  - ${iface}"
+    done
+
+    echo -e "${BLUE}[?] ¿Habilitar modo monitor en alguna tarjeta? (y/n)${NC}"
+    read -p "Respuesta: " response
+    if [[ "$response" == "y" ]]; then
+        echo -e "${BLUE}[+] Selecciona una tarjeta:${NC}"
+        select iface in $interfaces; do
+            if [[ -n "$iface" ]]; then
+                echo -e "${BLUE}[+] Habilitando modo monitor en ${iface}...${NC}"
+                airmon-ng start $iface || iw dev $iface set type monitor
+                echo -e "${GREEN}[+] ${iface} ahora está en modo monitor.${NC}"
+                break
+            else
+                echo -e "${RED}[-] Selección inválida.${NC}"
+            fi
+        done
+    else
+        echo -e "${RED}[-] Operación cancelada.${NC}"
+    fi
+    sleep 2
+}
+
+# Escaneo de redes
+scan_networks() {
+    clear_screen
+    echo -e "${BLUE}[+] Iniciando escaneo de redes WiFi durante 60 segundos...${NC}"
+    xterm -hold -e "airodump-ng wlan0 --output-format csv --write $PROJECT_DIR/scan_results" &
+    sleep 60
+    killall airodump-ng
+    echo -e "${GREEN}[+] Escaneo completado. Resultados guardados en $PROJECT_DIR.${NC}"
+    sleep 2
+}
+
 # Realizar ataque con diccionario
 dictionary_attack() {
     clear_screen
@@ -104,15 +152,19 @@ main_menu() {
         clear_screen
         echo -e "${BLUE}[=]==================== Menú Principal ====================[=]${NC}"
         echo -e "${GREEN}1.${NC} Verificar e instalar dependencias"
-        echo -e "${GREEN}2.${NC} Realizar ataque con diccionario"
-        echo -e "${GREEN}3.${NC} Salir"
+        echo -e "${GREEN}2.${NC} Habilitar modo monitor"
+        echo -e "${GREEN}3.${NC} Escanear redes"
+        echo -e "${GREEN}4.${NC} Realizar ataque con diccionario"
+        echo -e "${GREEN}5.${NC} Salir"
         echo -e "${BLUE}[=]=====================================================[=]${NC}"
         read -p "Selecciona una opción: " option
 
         case $option in
             1) install_dependencies ;;
-            2) dictionary_attack ;;
-            3) echo -e "${RED}[-] Saliendo...${NC}"; exit 0 ;;
+            2) enable_monitor_mode ;;
+            3) scan_networks ;;
+            4) dictionary_attack ;;
+            5) echo -e "${RED}[-] Saliendo...${NC}"; exit 0 ;;
             *) echo -e "${RED}[-] Opción no válida.${NC}"; sleep 2 ;;
         esac
     done
