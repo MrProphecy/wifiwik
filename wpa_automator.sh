@@ -40,8 +40,8 @@ prepare_directories() {
   echo -e "${BLUE}[+] Directorios preparados: $RESULTS_DIR, $DICT_DIR${NC}"
 }
 
-# Escaneo de tarjetas y modo monitor
-scan_and_enable_monitor() {
+# Escaneo de tarjetas y gestión del modo monitor
+manage_monitor_mode() {
   echo -e "${BLUE}[+] Detectando interfaces inalámbricas...${NC}"
   interfaces=$(iw dev | grep Interface | awk '{print $2}')
 
@@ -79,31 +79,27 @@ scan_and_enable_monitor() {
     fi
   fi
 
-  monitor_capable=()
-  for iface in $interfaces; do
-    supports_monitor=$(iw list | grep -A 10 "Interface $iface" | grep "Supported interface modes" -A 10 | grep "monitor")
-    if [[ -n "$supports_monitor" ]]; then
-      echo -e "  ${GREEN}[+] ${iface} soporta modo monitor.${NC}"
-      monitor_capable+=($iface)
-    else
-      echo -e "  ${RED}[-] ${iface} no soporta modo monitor.${NC}"
-    fi
-  done
-
-  if [[ ${#monitor_capable[@]} -eq 0 ]]; then
-    echo -e "${RED}[-] No se encontraron tarjetas que soporten modo monitor.${NC}"
-    exit 1
-  fi
-
-  echo -e "${BLUE}[+] Tarjetas con modo monitor disponibles:${NC}"
-  for iface in "${monitor_capable[@]}"; do
-    echo -e "  - ${iface}"
-  done
-
-  echo -e "${BLUE}[+] ¿Deseas habilitar el modo monitor en alguna tarjeta? (y/n)${NC}"
+  echo -e "${BLUE}[?] ¿Deseas habilitar el modo monitor en alguna tarjeta? (y/n)${NC}"
   read -p "Respuesta: " response
-
   if [[ "$response" == "y" ]]; then
+    monitor_capable=()
+    for iface in $interfaces; do
+      supports_monitor=$(iw list | grep -A 10 "Interface $iface" | grep "Supported interface modes" -A 10 | grep "monitor")
+      if [[ -n "$supports_monitor" ]]; then
+        monitor_capable+=($iface)
+      fi
+    done
+
+    if [[ ${#monitor_capable[@]} -eq 0 ]]; then
+      echo -e "${RED}[-] No se encontraron tarjetas que soporten modo monitor.${NC}"
+      exit 1
+    fi
+
+    echo -e "${BLUE}[+] Tarjetas con modo monitor disponibles:${NC}"
+    for iface in "${monitor_capable[@]}"; do
+      echo -e "  - ${iface}"
+    done
+
     echo -e "${BLUE}[+] Selecciona la tarjeta para habilitar modo monitor:${NC}"
     select iface in "${monitor_capable[@]}"; do
       if [[ -n "$iface" ]]; then
@@ -179,7 +175,7 @@ main_menu() {
     echo -e "${YELLOW}                Menú Principal                ${NC}"
     echo -e "${BLUE}[=]=============================================[=]${NC}"
     echo -e "${GREEN}1.${NC} Verificar e instalar dependencias"
-    echo -e "${GREEN}2.${NC} Escanear y habilitar modo monitor"
+    echo -e "${GREEN}2.${NC} Gestionar modo monitor"
     echo -e "${GREEN}3.${NC} Escanear redes"
     echo -e "${GREEN}4.${NC} Analizar y recomendar redes"
     echo -e "${GREEN}5.${NC} Ataque con diccionario"
@@ -189,7 +185,7 @@ main_menu() {
 
     case $option in
       1) install_dependencies ;;
-      2) scan_and_enable_monitor ;;
+      2) manage_monitor_mode ;;
       3) scan_networks ;;
       4) analyze_networks ;;
       5) dictionary_attack_menu ;;
