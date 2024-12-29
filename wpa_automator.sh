@@ -51,9 +51,19 @@ fi
 
 # Paso 3: Escanear redes
 echo -e "${YELLOW}Paso 3: Escaneando redes cercanas...${NC}"
-echo -e "${YELLOW}Presiona Ctrl+C cuando encuentres la red objetivo.${NC}"
+echo -e "${YELLOW}El escaneo durará 1 minuto. Presiona Ctrl+C para detenerlo manualmente si encuentras la red antes.${NC}"
 sleep 2
-airodump-ng $interface_mon
+timeout 60s airodump-ng $interface_mon
+
+# Recomendaciones de redes óptimas
+read -p "¿Deseas ver las recomendaciones de redes óptimas? (s/n): " recommend_choice
+if [[ "$recommend_choice" == "s" ]]; then
+    echo -e "${YELLOW}Redes óptimas según la señal y actividad:${NC}"
+    echo -e "${GREEN}- Redes con mayor potencia de señal (PWR cercano a 0).${NC}"
+    echo -e "${GREEN}- Redes con clientes activos (STAIONs detectados).${NC}"
+    echo -e "${GREEN}- Redes con menos interferencias en el canal utilizado.${NC}"
+    echo -e "${YELLOW}Revisa la salida de airodump-ng para elegir una red apropiada.${NC}"
+fi
 
 # Paso 4: Captura de paquetes
 read -p "Introduce el BSSID de la red objetivo: " bssid
