@@ -10,11 +10,36 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # Sin color
 
+# Lista de dependencias necesarias
+dependencies=("aircrack-ng" "net-tools" "wireless-tools")
+
+# Función para verificar y/o instalar dependencias
+check_dependencies() {
+  echo -e "${YELLOW}[INFO] Verificando dependencias...${NC}"
+  for package in "${dependencies[@]}"; do
+    if ! dpkg -l | grep -q "$package"; then
+      echo -e "${RED}[WARNING] $package no está instalado. Instalando...${NC}"
+      sudo apt update && sudo apt install -y "$package"
+      if [ $? -eq 0 ]; then
+        echo -e "${GREEN}[INFO] $package instalado correctamente.${NC}"
+      else
+        echo -e "${RED}[ERROR] No se pudo instalar $package. Verifica tu conexión a Internet e intenta nuevamente.${NC}"
+        exit 1
+      fi
+    else
+      echo -e "${GREEN}[INFO] $package ya está instalado.${NC}"
+    fi
+  done
+}
+
 # Verifica si el usuario es root
 if [[ $EUID -ne 0 ]]; then
    echo -e "${RED}Por favor, ejecuta este script como root.${NC}"
    exit 1
 fi
+
+# Verificar dependencias
+check_dependencies
 
 # Bienvenida
 echo -e "${GREEN}Bienvenido a Wifi Vik - Automatizador WPA/WPA2${NC}"
