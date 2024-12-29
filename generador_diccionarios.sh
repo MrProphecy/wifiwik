@@ -3,11 +3,10 @@
 # Verifica si el usuario tiene permisos de root
 if [ "$EUID" -ne 0 ]; then
   echo "Por favor, ejecuta el script como root."
-  exit
+  exit 1
 fi
 
 echo "=== Generador de Diccionarios para Redes Wi-Fi ==="
-echo "=== Realizado por Viking ==="
 
 # Menú principal
 while true; do
@@ -39,6 +38,10 @@ while true; do
       # CUPP
       echo ""
       echo "== Generador con CUPP =="
+      if ! command -v cupp &> /dev/null; then
+        echo "CUPP no está instalado. Instalándolo ahora..."
+        apt update && apt install -y cupp
+      fi
       echo "Ejecutando CUPP en modo interactivo..."
       cupp -i
       ;;
