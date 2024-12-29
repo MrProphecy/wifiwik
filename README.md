@@ -1,24 +1,5 @@
 Manual de Administrador y Usuario: WiFi Vik Automator
 
-            Índice
-
-            Introducción
-
-            Descripción del Script
-
-            Funcionamiento del Script
-
-            Manual de Uso
-
-            Requisitos Previos
-
-            Instrucciones de Ejecución
-
-            Explicación Paso a Paso
-
-            Preguntas Frecuentes (FAQ)
-
-            
 
 
 
@@ -198,3 +179,39 @@ Asegúrate de que hay actividad en la red objetivo.
 Prueba acercarte al punto de acceso para mejorar la captura de paquetes.
 
 Repite el proceso de captura si es necesario.
+
+
+
+
+
+
+            Intención del Uso y Ética
+
+
+El script WiFi Vik Automator ha sido creado por Viking como una herramienta educativa y de divulgación en el campo de la ciberseguridad. Su propósito es fomentar el conocimiento sobre la seguridad de redes inalámbricas, permitiendo a los usuarios comprender cómo protegerse frente a ataques y cómo evaluar la fortaleza de sus propias redes.
+
+El autor, Viking, promueve el uso de esta herramienta únicamente en entornos controlados o con el permiso explícito del propietario de la red. El uso indebido de esta herramienta en redes ajenas sin autorización constituye una violación de la ley y de los principios éticos fundamentales.
+
+
+
+            Colaboración y Compartición
+
+            
+
+Se invita a la comunidad a contribuir al desarrollo y mejora de esta herramienta a través del repositorio en GitHub. Las contribuciones pueden incluir:
+
+            Reportes de errores.
+
+            Mejora del código.
+
+            Inclusión de nuevas funcionalidades.
+
+Cómo contribuir:
+
+            Clona el repositorio: git clone <URL>
+
+            Realiza los cambios necesarios.
+
+            Envía un pull request detallando las mejoras o correcciones realizadas.
+
+            El objetivo final de esta herramienta es educar, concienciar y reforzar la seguridad digital.
