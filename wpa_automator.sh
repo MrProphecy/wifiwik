@@ -107,6 +107,32 @@ scan_networks() {
     sleep 2
 }
 
+# Gestión de diccionarios
+manage_dictionaries() {
+    clear_screen
+    echo -e "${BLUE}[+] Verificando diccionarios en $PROJECT_DIR...${NC}"
+    dictionaries=$(find "$PROJECT_DIR" -type f -name "*.txt")
+
+    if [[ -z "$dictionaries" ]]; then
+        echo -e "${RED}[-] No se encontraron diccionarios en la carpeta del proyecto.${NC}"
+        echo -e "${BLUE}[?] ¿Deseas descargar el diccionario 'rockyou.txt'? (y/n)${NC}"
+        read -p "Respuesta: " response
+
+        if [[ "$response" == "y" ]]; then
+            echo -e "${BLUE}[+] Descargando diccionario...${NC}"
+            curl -o "$PROJECT_DIR/rockyou.txt.gz" https://github.com/praetorian-inc/Hob0Rules/raw/master/wordlists/rockyou.txt.gz
+            gzip -d "$PROJECT_DIR/rockyou.txt.gz"
+            echo -e "${GREEN}[+] Diccionario descargado y descomprimido en $PROJECT_DIR/rockyou.txt${NC}"
+        else
+            echo -e "${RED}[-] Operación cancelada.${NC}"
+        fi
+    else
+        echo -e "${GREEN}[+] Diccionarios encontrados:${NC}"
+        echo "$dictionaries"
+    fi
+    sleep 2
+}
+
 # Realizar ataque con diccionario
 dictionary_attack() {
     clear_screen
@@ -154,8 +180,9 @@ main_menu() {
         echo -e "${GREEN}1.${NC} Verificar e instalar dependencias"
         echo -e "${GREEN}2.${NC} Habilitar modo monitor"
         echo -e "${GREEN}3.${NC} Escanear redes"
-        echo -e "${GREEN}4.${NC} Realizar ataque con diccionario"
-        echo -e "${GREEN}5.${NC} Salir"
+        echo -e "${GREEN}4.${NC} Gestionar diccionarios"
+        echo -e "${GREEN}5.${NC} Realizar ataque con diccionario"
+        echo -e "${GREEN}6.${NC} Salir"
         echo -e "${BLUE}[=]=====================================================[=]${NC}"
         read -p "Selecciona una opción: " option
 
@@ -163,8 +190,9 @@ main_menu() {
             1) install_dependencies ;;
             2) enable_monitor_mode ;;
             3) scan_networks ;;
-            4) dictionary_attack ;;
-            5) echo -e "${RED}[-] Saliendo...${NC}"; exit 0 ;;
+            4) manage_dictionaries ;;
+            5) dictionary_attack ;;
+            6) echo -e "${RED}[-] Saliendo...${NC}"; exit 0 ;;
             *) echo -e "${RED}[-] Opción no válida.${NC}"; sleep 2 ;;
         esac
     done
