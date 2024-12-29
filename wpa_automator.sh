@@ -12,7 +12,7 @@ NC='\033[0m' # Sin color
 
 echo -e "${GREEN}Bienvenido a Wifi Vik - Automatizador WPA/WPA2${NC}"
 echo -e "${YELLOW}Nota: Usa esto solo para redes propias o con permiso.${NC}\n"
-sleep 3
+sleep 13
 
 # Verificar e instalar dos2unix si es necesario
 clear
@@ -28,14 +28,14 @@ then
 else
     echo -e "${GREEN}dos2unix ya está instalado.${NC}"
 fi
-sleep 3
+sleep 13
 
 # Convertir el archivo al formato correcto
 clear
 echo -e "${YELLOW}Convirtiendo el archivo al formato Linux...${NC}"
 script_name="$0"
 dos2unix "$script_name"
-sleep 3
+sleep 13
 
 # Paso 1: Seleccionar la interfaz WiFi
 clear
@@ -43,7 +43,7 @@ echo -e "${YELLOW}Paso 1: Selección de interfaz WiFi.${NC}"
 echo -e "Listando interfaces disponibles..."
 iwconfig
 read -p "Introduce tu interfaz WiFi (ejemplo: wlan0): " interface
-sleep 3
+sleep 13
 
 # Paso 2: Activar modo monitor
 clear
@@ -58,7 +58,7 @@ else
     echo -e "${RED}Error: No se pudo activar el modo monitor.${NC}"
     exit 1
 fi
-sleep 3
+sleep 13
 
 # Paso 3: Escanear redes
 clear
@@ -69,9 +69,9 @@ timeout 60s airodump-ng --write $output_scan --output-format csv $interface_mon
 clear
 echo -e "${GREEN}Escaneo completado.${NC}"
 echo -e "Mostrando redes escaneadas..."
-sleep 3
-airodump-ng $interface_mon
-sleep 5
+sleep 13
+airodump-ng $interface_mon --write $output_scan --output-format csv
+sleep 15
 
 # Analizar las redes escaneadas
 clear
@@ -88,14 +88,14 @@ essid=$(echo $best_network | awk '{print $3}')
 
 echo -e "${YELLOW}Red recomendada:${NC}"
 echo -e "BSSID: ${GREEN}$bssid${NC}, Canal: ${GREEN}$channel${NC}, ESSID: ${GREEN}$essid${NC}"
-sleep 3
+sleep 13
 
 read -p "¿Quieres continuar con esta red? (s/n): " continue_choice
 if [[ "$continue_choice" != "s" ]]; then
     echo -e "${RED}Proceso terminado por el usuario.${NC}"
     exit 1
 fi
-sleep 3
+sleep 13
 
 # Paso 4: Captura de paquetes
 clear
@@ -103,7 +103,7 @@ echo -e "${YELLOW}Paso 4: Capturando paquetes para la red seleccionada.${NC}"
 echo -e "Iniciando captura de paquetes para $essid en el canal $channel."
 airodump-ng --bssid $bssid -c $channel -w capture --output-format cap $interface_mon &
 echo -e "${YELLOW}Esperando handshake... Esto puede tardar unos minutos.${NC}"
-sleep 30
+sleep 40
 pkill -f "airodump-ng"
 
 # Verificar si se capturó el handshake
@@ -115,7 +115,7 @@ if [[ ! -f capture-01.cap ]]; then
 fi
 
 echo -e "${GREEN}Handshake capturado exitosamente.${NC}"
-sleep 3
+sleep 13
 
 # Paso 5: Crackear la contraseña
 clear
@@ -129,7 +129,7 @@ if [[ "$crack_choice" == "s" ]]; then
 else
     echo -e "${YELLOW}Saltando crackeo.${NC}"
 fi
-sleep 3
+sleep 13
 
 # Paso 6: Detener modo monitor
 clear
@@ -138,5 +138,5 @@ airmon-ng stop $interface_mon
 echo -e "${GREEN}Modo monitor desactivado.${NC}"
 
 echo -e "${GREEN}¡Proceso completado!${NC}"
-sleep 3
+sleep 13
 exit 0
