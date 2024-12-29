@@ -13,7 +13,7 @@ DOWNLOADS_DIR="/root/Downloads"
 PROJECT_DIR="$DOWNLOADS_DIR/$PROJECT_NAME"
 
 # Dependencias necesarias
-DEPENDENCIES=("aircrack-ng" "xterm" "iw")
+DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip")
 
 # Función: Limpiar pantalla con scroll visible
 clear_screen() {
@@ -150,17 +150,16 @@ dictionary_attack() {
         fi
     done
 
-    # Solicitar diccionario
-    while true; do
-        echo -e "${YELLOW}[?] Ingresa la ruta al archivo de diccionario:${NC}"
-        read -p "Diccionario: " dictionary
-        if [[ -f "$dictionary" ]]; then
-            echo -e "${GREEN}[+] Diccionario encontrado: $dictionary${NC}"
-            break
-        else
-            echo -e "${RED}[-] Diccionario no encontrado. Inténtalo nuevamente.${NC}"
-        fi
-    done
+    # Verificar o descargar automáticamente el diccionario rockyou.txt
+    dictionary="$PROJECT_DIR/rockyou.txt"
+    if [[ ! -f "$dictionary" ]]; then
+        echo -e "${YELLOW}[!] Diccionario 'rockyou.txt' no encontrado. Descargando automáticamente...${NC}"
+        curl -o "$PROJECT_DIR/rockyou.txt.gz" https://github.com/praetorian-inc/Hob0Rules/raw/master/wordlists/rockyou.txt.gz
+        gzip -d "$PROJECT_DIR/rockyou.txt.gz"
+        echo -e "${GREEN}[+] Diccionario descargado y descomprimido en $dictionary${NC}"
+    else
+        echo -e "${GREEN}[+] Usando diccionario existente: $dictionary${NC}"
+    fi
 
     # Solicitar BSSID
     echo -e "${YELLOW}[?] Ingresa el BSSID de la red objetivo:${NC}"
