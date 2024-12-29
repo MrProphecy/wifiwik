@@ -13,6 +13,24 @@ NC='\033[0m' # Sin color
 echo -e "${GREEN}Bienvenido a Wifi Vik - Automatizador WPA/WPA2${NC}"
 echo -e "${YELLOW}Nota: Usa esto solo para redes propias o con permiso.${NC}\n"
 
+# Verificar e instalar dos2unix si es necesario
+if ! command -v dos2unix &> /dev/null
+then
+    echo -e "${YELLOW}Instalando dos2unix...${NC}"
+    sudo apt update && sudo apt install -y dos2unix
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}Error: No se pudo instalar dos2unix.${NC}"
+        exit 1
+    fi
+else
+    echo -e "${GREEN}dos2unix ya está instalado.${NC}"
+fi
+
+# Convertir el archivo al formato correcto
+script_name="$0"
+echo -e "${YELLOW}Convirtiendo el archivo al formato Linux...${NC}"
+dos2unix "$script_name"
+
 # Paso 1: Seleccionar la interfaz WiFi
 echo -e "${YELLOW}Paso 1: Listando interfaces WiFi...${NC}"
 iwconfig
