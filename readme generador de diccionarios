@@ -1,0 +1,48 @@
+Generador de Diccionarios para Redes Wi-Fi
+Este repositorio contiene un script llamado generador_diccionarios.sh diseñado para facilitar la creación de diccionarios personalizables en sistemas Linux, especialmente útil para redes WPA/WPA2/WPA3.
+
+El script permite utilizar herramientas como crunch, cupp y el popular diccionario rockyou.txt, proporcionando una interfaz interactiva para generar y gestionar diccionarios según tus necesidades.
+
+Cómo Usar el Script
+Para descargar, otorgar permisos de ejecución y ejecutar el script en tu sistema Kali Linux, utiliza el siguiente comando:
+
+bash
+Copiar código
+sudo curl -L -o generador_diccionarios.sh https://raw.githubusercontent.com/MrProphecy/wifiwik/main/generador_diccionarios.sh && sudo chmod +x generador_diccionarios.sh && sudo ./generador_diccionarios.sh
+Explicación del Comando
+sudo: Asegura que el script se ejecute con permisos de administrador, ya que algunas funciones requieren acceso privilegiado.
+curl -L -o generador_diccionarios.sh: Descarga el script desde el repositorio en GitHub y lo guarda como generador_diccionarios.sh:
+-L: Sigue redirecciones automáticas, ya que GitHub utiliza una URL intermedia antes de llegar al archivo.
+-o: Especifica el nombre del archivo descargado.
+chmod +x generador_diccionarios.sh: Otorga permisos de ejecución al script, permitiendo que se ejecute como un programa.
+./generador_diccionarios.sh: Ejecuta el script en la terminal.
+Opciones del Script
+El script ofrece varias opciones para crear diccionarios según tus necesidades:
+
+Generar Diccionario con Crunch:
+
+Permite especificar longitud mínima, máxima y caracteres personalizados para crear un diccionario optimizado.
+Crear Diccionario Personalizado con CUPP:
+
+Basado en ingeniería social, genera diccionarios personalizados utilizando datos como nombres, fechas, y más.
+Usar el Diccionario Rockyou.txt:
+
+Descarga y utiliza el famoso diccionario rockyou.txt, ideal para contraseñas comunes.
+Salir:
+
+Finaliza la ejecución del script.
+Recomendaciones
+Es recomendable ejecutar el script desde un sistema Linux, como Kali Linux, que ya incluye muchas herramientas necesarias.
+Antes de usar el script, asegúrate de tener permisos legales para realizar pruebas con los diccionarios generados.
+Nota Importante
+Si deseas ejecutar nuevamente el script más adelante, no necesitas volver a descargarlo. Simplemente ejecuta:
+
+bash
+Copiar código
+sudo ./generador_diccionarios.sh
+Sin embargo, se recomienda descargar el script nuevamente con el comando inicial para asegurarte de tener la versión más reciente, ya que podrían haberse implementado mejoras o actualizaciones.
+
+Licencia
+Este proyecto se proporciona bajo la Licencia MIT, lo que significa que puedes usarlo, modificarlo y distribuirlo libremente, siempre que incluyas los créditos correspondientes.
+
+Si tienes dudas, problemas o sugerencias, no dudes en abrir un issue en este repositorio. ¡Tu feedback es bienvenido! 🚀
