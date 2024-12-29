@@ -16,6 +16,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Bienvenida
 echo -e "${GREEN}Bienvenido a Wifi Vik - Automatizador WPA/WPA2${NC}"
 echo -e "${YELLOW}Nota: Usa esto solo para redes propias o con permiso.${NC}\n"
 sleep 10
@@ -91,11 +92,28 @@ else
 fi
 sleep 10
 
-# Paso 6: Desactivar modo monitor
+# Paso 6: Restaurar modo managed
 clear
-echo -e "${YELLOW}Paso 6: Desactivando modo monitor.${NC}"
-airmon-ng stop "$interface_mon"
-echo -e "${GREEN}Modo monitor desactivado.${NC}"
+echo -e "${YELLOW}Paso 6: Restaurando la interfaz al modo managed.${NC}"
+read -p "¿Quieres restaurar la interfaz al modo managed? (s/n): " restore_choice
+if [[ "$restore_choice" == "s" ]]; then
+    echo -e "Desactivando la interfaz $interface_mon..."
+    sudo ip link set "$interface_mon" down
 
+    echo -e "Cambiando $interface_mon a modo managed..."
+    sudo iwconfig "$interface_mon" mode managed
+
+    echo -e "Reactivando la interfaz $interface_mon..."
+    sudo ip link set "$interface_mon" up
+
+    echo -e "Estado de la interfaz:${NC}"
+    iwconfig "$interface_mon"
+    echo -e "${GREEN}La interfaz $interface_mon ha vuelto al modo managed.${NC}"
+else
+    echo -e "${YELLOW}Saltando restauración de modo managed.${NC}"
+fi
+
+# Finalización
 echo -e "${GREEN}¡Proceso completado!${NC}"
+sleep 10
 exit 0
