@@ -1,4 +1,4 @@
-Manual de Administrador y Usuario: WiFi Vik Automator
+Manual de Administrador y Usuario: WiFi Wik Automator
 
 
 
@@ -7,7 +7,7 @@ Manual de Administrador y Usuario: WiFi Vik Automator
 
     
 
-El WiFi Vik Automator es una herramienta diseñada para automatizar tareas relacionadas con la auditoría de redes inalámbricas WPA/WPA2. Este manual proporciona una guía completa para administradores y usuarios, explicando cómo utilizar el script, qué esperar en cada paso y cómo resolver problemas comunes.
+El WiFi Wik Automator es una herramienta diseñada para automatizar tareas relacionadas con la auditoría de redes inalámbricas WPA/WPA2. Este manual proporciona una guía completa para administradores y usuarios, explicando cómo utilizar el script, qué esperar en cada paso y cómo resolver problemas comunes.
 
 
 
@@ -15,7 +15,7 @@ El WiFi Vik Automator es una herramienta diseñada para automatizar tareas relac
 
     
 
-El WiFi Vik Automator automatiza tareas complejas como la captura de paquetes y el crackeo de handshakes utilizando herramientas de auditoría como aircrack-ng y airodump-ng. Permite analizar redes, probar su seguridad y realizar pruebas éticas dentro de un flujo simplificado y guiado.
+El WiFi Wik Automator automatiza tareas complejas como la captura de paquetes y el crackeo de handshakes utilizando herramientas de auditoría como aircrack-ng y airodump-ng. Permite analizar redes, probar su seguridad y realizar pruebas éticas dentro de un flujo simplificado y guiado.
 
 Nota importante: El script debe usarse solo en redes propias o con autorización explícita. Su uso indebido puede ser ilegal.
 
