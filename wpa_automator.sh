@@ -53,7 +53,10 @@ fi
 echo -e "${YELLOW}Paso 3: Escaneando redes cercanas...${NC}"
 echo -e "${YELLOW}El escaneo durará 1 minuto.${NC}"
 output_scan="scan_results.csv"
-timeout 60s airodump-ng --write $output_scan --output-format csv $interface_mon
+timeout 60s airodump-ng --write $output_scan --output-format csv $interface_mon &
+sleep 5
+echo -e "${YELLOW}Mostrando redes escaneadas...${NC}"
+airodump-ng $interface_mon
 
 echo -e "${GREEN}Escaneo completado. Analizando resultados...${NC}"
 
