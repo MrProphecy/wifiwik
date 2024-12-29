@@ -63,38 +63,15 @@ sleep 13
 # Paso 3: Escanear redes
 clear
 echo -e "${YELLOW}Paso 3: Escaneando redes cercanas.${NC}"
-echo -e "El escaneo durará 1 minuto."
-output_scan="scan_results.csv"
-timeout 60s airodump-ng --write $output_scan --output-format csv $interface_mon
-clear
-echo -e "${GREEN}Escaneo completado.${NC}"
-echo -e "Mostrando redes escaneadas..."
+echo -e "Mostrando redes en tiempo real. Presiona Ctrl+C cuando encuentres la red objetivo."
 sleep 13
-airodump-ng $interface_mon --write $output_scan --output-format csv
-sleep 15
+airodump-ng $interface_mon
 
-# Analizar las redes escaneadas
-clear
-echo -e "${YELLOW}Analizando las redes escaneadas para determinar la más óptima...${NC}"
-best_network=$(awk -F',' 'NR>2 && $4 ~ /WPA/ {print $1, $4, $6, $14 | "sort -t"," -k9 -n | head -n 1"}' $output_scan-01.csv)
-if [[ -z "$best_network" ]]; then
-    echo -e "${RED}No se encontraron redes óptimas para continuar.${NC}"
-    exit 1
-fi
-
-bssid=$(echo $best_network | awk '{print $1}')
-channel=$(echo $best_network | awk '{print $2}')
-essid=$(echo $best_network | awk '{print $3}')
-
-echo -e "${YELLOW}Red recomendada:${NC}"
-echo -e "BSSID: ${GREEN}$bssid${NC}, Canal: ${GREEN}$channel${NC}, ESSID: ${GREEN}$essid${NC}"
-sleep 13
-
-read -p "¿Quieres continuar con esta red? (s/n): " continue_choice
-if [[ "$continue_choice" != "s" ]]; then
-    echo -e "${RED}Proceso terminado por el usuario.${NC}"
-    exit 1
-fi
+# Solicitar datos de la red seleccionada
+echo -e "${YELLOW}Introduce los datos de la red seleccionada para continuar.${NC}"
+read -p "Introduce el BSSID de la red objetivo: " bssid
+read -p "Introduce el canal (CH) de la red objetivo: " channel
+read -p "Introduce el ESSID de la red objetivo: " essid
 sleep 13
 
 # Paso 4: Captura de paquetes
