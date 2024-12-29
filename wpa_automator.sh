@@ -116,4 +116,39 @@ echo -e "${GREEN}Modo monitor desactivado.${NC}"
 
 echo -e "${GREEN}¡Proceso completado!${NC}"
 sleep 13
+#!/bin/bash
+
+# Verifica si el usuario es root
+if [[ $EUID -ne 0 ]]; then
+   echo "Por favor, ejecuta este script como root."
+   exit 1
+fi
+
+# Identificar la interfaz
+INTERFACE=$(iwconfig 2>/dev/null | grep "Mode:Monitor" | awk '{print $1}')
+
+if [ -z "$INTERFACE" ]; then
+    echo "No se encontró ninguna interfaz en modo monitor."
+    exit 1
+fi
+
+# Desactivar la interfaz
+echo "Desactivando la interfaz $INTERFACE..."
+sudo ip link set "$INTERFACE" down
+
+# Cambiar a modo managed
+echo "Cambiando $INTERFACE a modo managed..."
+sudo iwconfig "$INTERFACE" mode managed
+
+# Activar la interfaz
+echo "Reactivando la interfaz $INTERFACE..."
+sudo ip link set "$INTERFACE" up
+
+# Verificar el estado
+echo "Estado de la interfaz:"
+iwconfig "$INTERFACE"
+
+echo "La interfaz $INTERFACE ha vuelto al modo managed."
+
+
 exit 0
