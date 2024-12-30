@@ -120,7 +120,7 @@ update_or_download_dictionary() {
     else
         echo -e "${GREEN}[+] Diccionario existente y listo para usar: $dictionary${NC}"
     fi
-    sleep 2
+    echo "$dictionary"
 }
 
 # Realizar ataque con diccionario actualizado
@@ -143,6 +143,9 @@ dictionary_attack_with_update() {
     # Preparar o verificar diccionario actualizado
     dictionary="$PROJECT_DIR/rockyou.txt"
     update_or_download_dictionary
+
+    # Mostrar la ruta directamente al usuario
+    echo -e "${GREEN}[+] Usando diccionario en: $dictionary${NC}"
 
     # Solicitar BSSID
     echo -e "${YELLOW}[?] Ingresa el BSSID de la red objetivo:${NC}"
