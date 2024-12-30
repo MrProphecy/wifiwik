@@ -11,6 +11,7 @@ NC='\033[0m' # Sin color
 PROJECT_NAME="wifi_toolkit"
 DOWNLOADS_DIR="/root/Downloads"
 PROJECT_DIR="$DOWNLOADS_DIR/$PROJECT_NAME"
+RESULTS_DIR="$PROJECT_DIR/resultados_wifi"
 
 # Dependencias necesarias
 DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip")
@@ -30,7 +31,7 @@ check_permissions() {
     fi
 }
 
-# Crear carpeta del proyecto
+# Crear carpeta del proyecto y de resultados
 prepare_project_directory() {
     clear_screen
     echo -e "${BLUE}[+] Verificando carpeta del proyecto en $DOWNLOADS_DIR...${NC}"
@@ -41,6 +42,15 @@ prepare_project_directory() {
         echo -e "${GREEN}[+] Carpeta creada: $PROJECT_DIR${NC}"
     else
         echo -e "${GREEN}[+] La carpeta del proyecto ya existe: $PROJECT_DIR${NC}"
+    fi
+
+    if [[ ! -d "$RESULTS_DIR" ]]; then
+        echo -e "${YELLOW}[!] La carpeta de resultados no existe. Creándola...${NC}"
+        mkdir -p "$RESULTS_DIR" || { echo -e "${RED}[-] Error al crear la carpeta de resultados.${NC}"; exit 1; }
+        chmod 755 "$RESULTS_DIR"
+        echo -e "${GREEN}[+] Carpeta creada: $RESULTS_DIR${NC}"
+    else
+        echo -e "${GREEN}[+] La carpeta de resultados ya existe: $RESULTS_DIR${NC}"
     fi
 }
 
@@ -100,10 +110,10 @@ enable_monitor_mode() {
 scan_networks() {
     clear_screen
     echo -e "${BLUE}[+] Iniciando escaneo de redes WiFi durante 60 segundos...${NC}"
-    xterm -hold -e "airodump-ng wlan0 --output-format csv --write $PROJECT_DIR/scan_results" &
+    xterm -hold -e "airodump-ng wlan0 --output-format cap --write $RESULTS_DIR/scan_results" &
     sleep 60
     killall airodump-ng
-    echo -e "${GREEN}[+] Escaneo completado. Resultados guardados en $PROJECT_DIR.${NC}"
+    echo -e "${GREEN}[+] Escaneo completado. Resultados guardados en $RESULTS_DIR.${NC}"
     sleep 2
 }
 
@@ -131,17 +141,24 @@ dictionary_attack_with_update() {
     clear_screen
     echo -e "${BLUE}[+] Preparando ataque con diccionario actualizado.${NC}"
 
-    # Solicitar archivo .cap
-    while true; do
-        echo -e "${YELLOW}[?] Ingresa la ruta al archivo .cap generado:${NC}"
-        read -p "Archivo .cap: " cap_file
-        if [[ -f "$cap_file" ]]; then
-            echo -e "${GREEN}[+] Archivo .cap encontrado: $cap_file${NC}"
-            break
-        else
-            echo -e "${RED}[-] Archivo no encontrado. Inténtalo nuevamente.${NC}"
-        fi
-    done
+    # Intentar buscar automáticamente el archivo .cap generado
+    cap_file=$(find $RESULTS_DIR -type f -name "*.cap" 2>/dev/null | head -n 1)
+
+    if [[ -z "$cap_file" ]]; then
+        echo -e "${RED}[-] No se encontró ningún archivo .cap automáticamente.${NC}"
+        while true; do
+            echo -e "${YELLOW}[?] Ingresa la ruta al archivo .cap generado:${NC}"
+            read -p "Archivo .cap: " cap_file
+            if [[ -f "$cap_file" ]]; then
+                echo -e "${GREEN}[+] Archivo .cap encontrado: $cap_file${NC}"
+                break
+            else
+                echo -e "${RED}[-] Archivo no encontrado. Inténtalo nuevamente.${NC}"
+            fi
+        done
+    else
+        echo -e "${GREEN}[+] Archivo .cap detectado automáticamente: $cap_file${NC}"
+    fi
 
     # Buscar o descargar diccionario
     dictionary=$(find_rockyou_dictionary)
