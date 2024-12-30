@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Colores para salida visual
+# Colores para la salida
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[0;33m'
@@ -14,17 +14,9 @@ PROJECT_DIR="$DOWNLOADS_DIR/$PROJECT_NAME"
 RESULTS_DIR="$PROJECT_DIR/resultados_wifi"
 DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip" "hashcat" "dialog")
 
-# Verificar y ajustar permisos del directorio de resultados
-prepare_directories() {
-    if [[ ! -d "$RESULTS_DIR" ]]; then
-        mkdir -p "$RESULTS_DIR"
-    fi
-    chmod -R 777 "$RESULTS_DIR"
-}
-
-# Comprobar e instalar dependencias necesarias
+# Función para verificar e instalar dependencias
 install_dependencies() {
-    dialog --title "Instalación de Dependencias" --infobox "Verificando dependencias necesarias..." 8 40
+    dialog --title "Instalación de Dependencias" --infobox "Verificando dependencias..." 8 40
     for dep in "${DEPENDENCIES[@]}"; do
         if ! command -v "$dep" &>/dev/null; then
             dialog --title "Instalando $dep" --infobox "Instalando $dep..." 8 40
@@ -37,53 +29,46 @@ install_dependencies() {
     dialog --title "Dependencias" --msgbox "Todas las dependencias están instaladas." 8 40
 }
 
-# Configurar la interfaz en modo monitor
-configure_monitor_mode() {
-    local interface=$(iw dev | grep Interface | awk '{print $2}' | head -n 1)
-    if [[ -z "$interface" ]]; then
-        dialog --title "Error" --msgbox "No se encontró ninguna interfaz inalámbrica. Conecta una tarjeta WiFi compatible." 8 40
-        exit 1
-    fi
-
-    airmon-ng start "$interface" &>/dev/null
-    local interface_monitor=$(iw dev | grep Interface | awk '{print $2}' | grep "mon" | head -n 1)
-
-    if [[ -z "$interface_monitor" ]]; then
-        dialog --title "Error" --msgbox "No se pudo configurar la interfaz en modo monitor." 8 40
-        exit 1
-    fi
-
-    echo "$interface_monitor"
+# Crear carpetas del proyecto
+prepare_project_directory() {
+    mkdir -p "$PROJECT_DIR" "$RESULTS_DIR" 2>/dev/null
+    sudo chmod -R 777 "$PROJECT_DIR" "$RESULTS_DIR" # Asignar permisos completos
 }
 
 # Escaneo en vivo de redes WiFi
 live_scan_networks() {
-    local interface=$(configure_monitor_mode)
-    dialog --title "Escaneo en Vivo" --infobox "Iniciando escaneo en vivo en la interfaz $interface..." 8 40
-    sleep 2
+    local interface=$(detect_wireless_interface)
+    if [[ -z "$interface" ]]; then
+        dialog --title "Error" --msgbox "No se encontró ninguna interfaz inalámbrica. Asegúrese de que el adaptador esté conectado." 8 40
+        return
+    fi
 
+    dialog --title "Escaneo en Vivo" --infobox "Escaneando redes en tiempo real..." 8 40
     xterm -geometry 80x24+0+0 -hold -e "airodump-ng $interface --output-format cap --write $RESULTS_DIR/live_scan" &
     sleep 10
     killall airodump-ng
 
-    # Validar si el archivo .cap se generó correctamente
     if [[ ! -f "$RESULTS_DIR/live_scan-01.cap" ]]; then
-        dialog --title "Error" --msgbox "El archivo live_scan-01.cap no se generó. Verifica los permisos y el estado de la interfaz." 8 40
-        exit 1
-    fi
-
-    show_scan_results "$RESULTS_DIR/live_scan-01.csv"
-}
-
-# Mostrar resultados del escaneo
-show_scan_results() {
-    local scan_file=$1
-    if [[ ! -f "$scan_file" ]]; then
-        dialog --title "Error" --msgbox "No se encontraron resultados del escaneo." 8 40
+        dialog --title "Error" --msgbox "El archivo live_scan-01.cap no se generó. Verifica el proceso de escaneo." 8 40
         return
     fi
 
-    parse_and_display_networks "$scan_file"
+    show_scan_results "$RESULTS_DIR/live_scan-01.cap"
+}
+
+# Detectar interfaz inalámbrica
+detect_wireless_interface() {
+    iw dev | grep Interface | awk '{print $2}' | head -n 1
+}
+
+# Mostrar resultados del escaneo en vivo
+show_scan_results() {
+    local scan_file=$1
+    if [[ -f "$scan_file" ]]; then
+        parse_and_display_networks "$scan_file"
+    else
+        dialog --title "Error" --msgbox "No se encontraron resultados de escaneo." 8 40
+    fi
 }
 
 # Analizar y mostrar redes encontradas
@@ -135,7 +120,7 @@ perform_attack() {
     local dictionary=$(find_or_download_dictionary)
 
     dialog --title "Ataque" --infobox "Iniciando ataque contra $bssid..." 8 40
-    xterm -hold -e "aircrack-ng -w $dictionary -b $bssid $RESULTS_DIR/live_scan-01.cap" &
+    xterm -geometry 80x24+0+0 -hold -e "aircrack-ng -w $dictionary -b $bssid $RESULTS_DIR/live_scan-01.cap" &
 }
 
 # Buscar o descargar diccionario rockyou.txt
@@ -153,7 +138,7 @@ find_or_download_dictionary() {
 # Menú principal
 main_menu() {
     while true; do
-        option=$(dialog --title "WiFi Toolkit" --menu "Seleccione una opción:" 20 60 10 \
+        option=$(dialog --title "WiFi Toolkit" --menu "Selecciona una opción:" 20 60 10 \
             1 "Instalar dependencias" \
             2 "Escaneo en vivo de redes" \
             3 "Listar y analizar redes" \
@@ -162,7 +147,7 @@ main_menu() {
         case $option in
             1) install_dependencies ;;
             2) live_scan_networks ;;
-            3) show_scan_results "$RESULTS_DIR/live_scan-01.csv" ;;
+            3) show_scan_results "$RESULTS_DIR/live_scan-01.cap" ;;
             4) clear; exit 0 ;;
             *) dialog --title "Error" --msgbox "Opción no válida." 8 40 ;;
         esac
@@ -170,6 +155,6 @@ main_menu() {
 }
 
 # Inicio del script
-prepare_directories
 install_dependencies
+prepare_project_directory
 main_menu
