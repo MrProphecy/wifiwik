@@ -63,7 +63,6 @@ live_scan_networks() {
 }
 
 # Detectar interfaz inalámbrica
-
 detect_wireless_interface() {
     iw dev | grep Interface | awk '{print $2}' | head -n 1
 }
