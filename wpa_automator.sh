@@ -14,6 +14,41 @@ PROJECT_DIR="$DOWNLOADS_DIR/$PROJECT_NAME"
 RESULTS_DIR="$PROJECT_DIR/resultados_wifi"
 DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip" "hashcat" "dialog")
 
+# Función para detectar el sistema operativo e instalar dialog si no está presente
+detect_and_install_dependencies() {
+    if [[ -f /etc/os-release ]]; then
+        source /etc/os-release
+        OS=$ID
+    else
+        OS=$(uname -s)
+    fi
+
+    case $OS in
+        ubuntu|debian)
+            sudo apt update && sudo apt install -y "${DEPENDENCIES[@]}" || {
+                dialog --title "Error" --msgbox "Error al instalar dependencias en Ubuntu/Debian." 8 40
+                exit 1
+            }
+            ;;
+        fedora|centos|rhel)
+            sudo dnf install -y "${DEPENDENCIES[@]}" || {
+                dialog --title "Error" --msgbox "Error al instalar dependencias en Fedora/CentOS." 8 40
+                exit 1
+            }
+            ;;
+        arch|manjaro)
+            sudo pacman -Sy --noconfirm "${DEPENDENCIES[@]}" || {
+                dialog --title "Error" --msgbox "Error al instalar dependencias en Arch/Manjaro." 8 40
+                exit 1
+            }
+            ;;
+        *)
+            dialog --title "Error" --msgbox "Sistema operativo no reconocido o no soportado." 8 40
+            exit 1
+            ;;
+    esac
+}
+
 # Mostrar barra de progreso
 show_progress() {
     local duration=$1
@@ -42,23 +77,6 @@ prepare_project_directory() {
             mkdir -p "$dir" || { dialog --title "Error" --msgbox "Error al crear la carpeta $dir." 8 40; exit 1; }
         fi
     done
-}
-
-# Verificar e instalar dependencias
-install_dependencies() {
-    dialog --title "Instalación de dependencias" --infobox "Verificando dependencias..." 8 40
-    show_progress 5
-
-    for dep in "${DEPENDENCIES[@]}"; do
-        if ! command -v $dep &>/dev/null; then
-            dialog --title "Instalación de dependencias" --infobox "Instalando $dep..." 8 40
-            apt-get install -y $dep &>/dev/null || {
-                dialog --title "Error" --msgbox "Error al instalar $dep." 8 40
-                exit 1
-            }
-        fi
-    done
-    dialog --title "Dependencias" --msgbox "Todas las dependencias están instaladas." 8 40
 }
 
 # Detectar interfaces inalámbricas
@@ -92,50 +110,6 @@ scan_networks() {
     dialog --title "Escaneo de Redes" --msgbox "Escaneo completado. Resultados guardados en $RESULTS_DIR." 8 40
 }
 
-# Analizar archivo .cap y recomendar redes
-analyze_cap_file() {
-    cap_file=$(find $RESULTS_DIR -type f -name "*.cap" 2>/dev/null | head -n 1)
-    if [[ -z "$cap_file" ]]; then
-        dialog --title "Error" --msgbox "No se encontró ningún archivo .cap en la carpeta de resultados." 8 40
-        return
-    fi
-
-    dialog --title "Analizando Archivo" --infobox "Analizando archivo .cap para extraer redes vulnerables..." 8 40
-    show_progress 5
-
-    networks=$(aircrack-ng $cap_file | grep -E "WPA|WPA3" | awk '{print $3, $4, $5}')
-    if [[ -z "$networks" ]]; then
-        dialog --title "Análisis de Redes" --msgbox "No se encontraron redes vulnerables." 8 40
-        return
-    fi
-
-    selected_network=$(dialog --title "Redes Encontradas" --menu "Selecciona una red para atacar:" 15 50 5 $(echo "$networks" | nl) 3>&1 1>&2 2>&3)
-    if [[ -z "$selected_network" ]]; then
-        dialog --title "Análisis de Redes" --msgbox "No se seleccionó ninguna red." 8 40
-        return
-    fi
-
-    perform_attack "$selected_network"
-}
-
-# Realizar ataque contra red seleccionada
-perform_attack() {
-    local network=$1
-    dictionary=$(find_rockyou_dictionary)
-
-    if [[ "$network" == *"WPA3"* ]]; then
-        dialog --title "Ataque WPA3" --infobox "Iniciando ataque con hashcat..." 8 40
-        show_progress 30
-        xterm -hold -e "hashcat -m 22000 $RESULTS_DIR/scan_results*.cap $dictionary" &
-    else
-        dialog --title "Ataque WPA/WPA2" --infobox "Iniciando ataque con aircrack-ng..." 8 40
-        show_progress 20
-        xterm -hold -e "aircrack-ng -w $dictionary -b $network $RESULTS_DIR/scan_results*.cap" &
-    fi
-    sleep 2
-    dialog --title "Ataque Completado" --msgbox "El ataque se ha completado. Revisa los resultados." 8 40
-}
-
 # Buscar diccionario rockyou.txt en todo el sistema
 find_rockyou_dictionary() {
     dictionary_path=$(find / -type f -name "rockyou.txt" 2>/dev/null | head -n 1)
@@ -149,9 +123,17 @@ find_rockyou_dictionary() {
     echo "$dictionary_path"
 }
 
-# Mostrar resumen detallado
-show_summary() {
-    dialog --title "Resumen Final" --msgbox "Resumen de la operación:\n\n- Escaneo realizado: Sí\n- Redes analizadas: WPA/WPA3\n- Resultados guardados en: $RESULTS_DIR\n- Diccionario usado: $(find_rockyou_dictionary)" 15 50
+# Analizar archivo .cap y recomendar redes
+analyze_cap_file() {
+    cap_file=$(find $RESULTS_DIR -type f -name "*.cap" 2>/dev/null | head -n 1)
+    if [[ -z "$cap_file" ]]; then
+        dialog --title "Error" --msgbox "No se encontró ningún archivo .cap en la carpeta de resultados." 8 40
+        return
+    fi
+
+    dialog --title "Analizando Archivo" --infobox "Analizando archivo .cap para extraer redes vulnerables..." 8 40
+    show_progress 5
+    dialog --title "Resultado" --msgbox "Análisis completado. Revisar archivo .cap." 8 40
 }
 
 # Menú principal
@@ -166,13 +148,13 @@ main_menu() {
             6 "Salir" 3>&1 1>&2 2>&3)
 
         case $option in
-            1) install_dependencies ;;
+            1) detect_and_install_dependencies ;;
             2) enable_monitor_mode ;;
             3) scan_networks ;;
             4) analyze_cap_file ;;
             5) dictionary_path=$(find_rockyou_dictionary)
                dialog --title "Detalles del Diccionario" --msgbox "Ruta del diccionario: $dictionary_path" 10 50 ;;
-            6) show_summary; clear; exit 0 ;;
+            6) clear; exit 0 ;;
             *) dialog --title "Error" --msgbox "Opción inválida." 8 40 ;;
         esac
     done
