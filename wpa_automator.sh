@@ -7,13 +7,11 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # Sin color
 
-# Nombre del proyecto
+# Configuración del proyecto
 PROJECT_NAME="wifi_toolkit"
-DOWNLOADS_DIR="/root/Downloads"
+DOWNLOADS_DIR="$HOME/Downloads"
 PROJECT_DIR="$DOWNLOADS_DIR/$PROJECT_NAME"
 RESULTS_DIR="$PROJECT_DIR/resultados_wifi"
-
-# Dependencias necesarias
 DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip")
 
 # Función: Limpiar pantalla con scroll visible
@@ -31,27 +29,20 @@ check_permissions() {
     fi
 }
 
-# Crear carpeta del proyecto y de resultados
+# Crear carpetas de proyecto y resultados
 prepare_project_directory() {
     clear_screen
-    echo -e "${BLUE}[+] Verificando carpeta del proyecto en $DOWNLOADS_DIR...${NC}"
-    if [[ ! -d "$PROJECT_DIR" ]]; then
-        echo -e "${YELLOW}[!] La carpeta del proyecto no existe. Creándola...${NC}"
-        mkdir -p "$PROJECT_DIR" || { echo -e "${RED}[-] Error al crear la carpeta del proyecto.${NC}"; exit 1; }
-        chmod 755 "$PROJECT_DIR"
-        echo -e "${GREEN}[+] Carpeta creada: $PROJECT_DIR${NC}"
-    else
-        echo -e "${GREEN}[+] La carpeta del proyecto ya existe: $PROJECT_DIR${NC}"
-    fi
-
-    if [[ ! -d "$RESULTS_DIR" ]]; then
-        echo -e "${YELLOW}[!] La carpeta de resultados no existe. Creándola...${NC}"
-        mkdir -p "$RESULTS_DIR" || { echo -e "${RED}[-] Error al crear la carpeta de resultados.${NC}"; exit 1; }
-        chmod 755 "$RESULTS_DIR"
-        echo -e "${GREEN}[+] Carpeta creada: $RESULTS_DIR${NC}"
-    else
-        echo -e "${GREEN}[+] La carpeta de resultados ya existe: $RESULTS_DIR${NC}"
-    fi
+    echo -e "${BLUE}[+] Verificando carpetas necesarias...${NC}"
+    for dir in "$PROJECT_DIR" "$RESULTS_DIR"; do
+        if [[ ! -d "$dir" ]]; then
+            echo -e "${YELLOW}[!] La carpeta $dir no existe. Creándola...${NC}"
+            mkdir -p "$dir" || { echo -e "${RED}[-] Error al crear la carpeta $dir.${NC}"; exit 1; }
+            chmod 755 "$dir"
+            echo -e "${GREEN}[+] Carpeta creada: $dir${NC}"
+        else
+            echo -e "${GREEN}[+] La carpeta ya existe: $dir${NC}"
+        fi
+    done
 }
 
 # Verificar e instalar dependencias
@@ -69,48 +60,34 @@ install_dependencies() {
     sleep 2
 }
 
+# Detectar interfaces inalámbricas
+detect_wireless_interface() {
+    interface=$(iw dev | grep Interface | awk '{print $2}' | head -n 1)
+    if [[ -z "$interface" ]]; then
+        echo -e "${RED}[-] No se encontró ninguna interfaz inalámbrica.${NC}"
+        exit 1
+    fi
+    echo "$interface"
+}
+
 # Gestión del modo monitor
 enable_monitor_mode() {
     clear_screen
+    interface=$(detect_wireless_interface)
     echo -e "${BLUE}[+] Detectando interfaces inalámbricas...${NC}"
-    interfaces=$(iw dev | grep Interface | awk '{print $2}')
-
-    if [[ -z "$interfaces" ]]; then
-        echo -e "${RED}[-] No se encontraron tarjetas inalámbricas.${NC}"
-        sleep 2
-        return
-    fi
-
-    echo -e "${BLUE}[+] Interfaces detectadas:${NC}"
-    for iface in $interfaces; do
-        echo -e "  - ${iface}"
-    done
-
-    echo -e "${BLUE}[?] ¿Habilitar modo monitor en alguna tarjeta? (y/n)${NC}"
-    read -p "Respuesta: " response
-    if [[ "$response" == "y" ]]; then
-        echo -e "${BLUE}[+] Selecciona una tarjeta:${NC}"
-        select iface in $interfaces; do
-            if [[ -n "$iface" ]]; then
-                echo -e "${BLUE}[+] Habilitando modo monitor en ${iface}...${NC}"
-                airmon-ng start $iface || iw dev $iface set type monitor
-                echo -e "${GREEN}[+] ${iface} ahora está en modo monitor.${NC}"
-                break
-            else
-                echo -e "${RED}[-] Selección inválida.${NC}"
-            fi
-        done
-    else
-        echo -e "${RED}[-] Operación cancelada.${NC}"
-    fi
+    echo -e "${BLUE}[+] Activando modo monitor en $interface...${NC}"
+    airmon-ng start $interface || iw dev $interface set type monitor
+    echo -e "${GREEN}[+] Modo monitor activado en $interface.${NC}"
     sleep 2
 }
 
 # Escaneo de redes
 scan_networks() {
     clear_screen
+    interface=$(detect_wireless_interface)
+    echo -e "${BLUE}[+] Usando la interfaz: $interface${NC}"
     echo -e "${BLUE}[+] Iniciando escaneo de redes WiFi durante 60 segundos...${NC}"
-    xterm -hold -e "airodump-ng wlan0 --output-format cap --write $RESULTS_DIR/scan_results" &
+    xterm -hold -e "airodump-ng $interface --output-format cap --write $RESULTS_DIR/scan_results" &
     sleep 60
     killall airodump-ng
     echo -e "${GREEN}[+] Escaneo completado. Resultados guardados en $RESULTS_DIR.${NC}"
