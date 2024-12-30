@@ -107,20 +107,23 @@ scan_networks() {
     sleep 2
 }
 
-# Verificar o descargar automáticamente el diccionario actualizado
-update_or_download_dictionary() {
+# Buscar diccionario rockyou.txt en todo el sistema
+find_rockyou_dictionary() {
     clear_screen
-    dictionary="$PROJECT_DIR/rockyou.txt"
-    echo -e "${BLUE}[+] Verificando diccionario actualizado...${NC}"
-    if [[ ! -f "$dictionary" ]]; then
+    echo -e "${BLUE}[+] Buscando diccionario 'rockyou.txt' en el sistema...${NC}"
+    dictionary_path=$(find / -type f -name "rockyou.txt" 2>/dev/null | head -n 1)
+
+    if [[ -z "$dictionary_path" ]]; then
         echo -e "${YELLOW}[!] Diccionario 'rockyou.txt' no encontrado. Descargando automáticamente...${NC}"
         curl -o "$PROJECT_DIR/rockyou.txt.gz" https://github.com/praetorian-inc/Hob0Rules/raw/master/wordlists/rockyou.txt.gz
         gzip -d "$PROJECT_DIR/rockyou.txt.gz"
-        echo -e "${GREEN}[+] Diccionario descargado y descomprimido en $dictionary${NC}"
+        dictionary_path="$PROJECT_DIR/rockyou.txt"
+        echo -e "${GREEN}[+] Diccionario descargado y descomprimido en $dictionary_path${NC}"
     else
-        echo -e "${GREEN}[+] Diccionario existente y listo para usar: $dictionary${NC}"
+        echo -e "${GREEN}[+] Diccionario encontrado en: $dictionary_path${NC}"
     fi
-    echo "$dictionary"
+
+    echo "$dictionary_path"
 }
 
 # Realizar ataque con diccionario actualizado
@@ -140,12 +143,8 @@ dictionary_attack_with_update() {
         fi
     done
 
-    # Preparar o verificar diccionario actualizado
-    dictionary="$PROJECT_DIR/rockyou.txt"
-    update_or_download_dictionary
-
-    # Mostrar la ruta directamente al usuario
-    echo -e "${GREEN}[+] Usando diccionario en: $dictionary${NC}"
+    # Buscar o descargar diccionario
+    dictionary=$(find_rockyou_dictionary)
 
     # Solicitar BSSID
     echo -e "${YELLOW}[?] Ingresa el BSSID de la red objetivo:${NC}"
@@ -165,9 +164,8 @@ main_menu() {
         echo -e "${GREEN}1.${NC} Verificar e instalar dependencias"
         echo -e "${GREEN}2.${NC} Habilitar modo monitor"
         echo -e "${GREEN}3.${NC} Escanear redes"
-        echo -e "${GREEN}4.${NC} Actualizar o descargar diccionario"
-        echo -e "${GREEN}5.${NC} Realizar ataque con diccionario actualizado"
-        echo -e "${GREEN}6.${NC} Salir"
+        echo -e "${GREEN}4.${NC} Realizar ataque con diccionario actualizado"
+        echo -e "${GREEN}5.${NC} Salir"
         echo -e "${BLUE}[=]=====================================================[=]${NC}"
         read -p "Selecciona una opción: " option
 
@@ -175,9 +173,8 @@ main_menu() {
             1) install_dependencies ;;
             2) enable_monitor_mode ;;
             3) scan_networks ;;
-            4) update_or_download_dictionary ;;
-            5) dictionary_attack_with_update ;;
-            6) echo -e "${RED}[-] Saliendo...${NC}"; exit 0 ;;
+            4) dictionary_attack_with_update ;;
+            5) echo -e "${RED}[-] Saliendo...${NC}"; exit 0 ;;
             *) echo -e "${RED}[-] Opción no válida.${NC}"; sleep 2 ;;
         esac
     done
