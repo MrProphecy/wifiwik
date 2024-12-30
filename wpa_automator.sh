@@ -40,6 +40,7 @@ install_dependencies() {
 # Crear carpetas del proyecto
 prepare_project_directory() {
     mkdir -p "$PROJECT_DIR" "$RESULTS_DIR" 2>/dev/null
+    sudo chmod -R 777 "$RESULTS_DIR"
 }
 
 # Escaneo en vivo de redes WiFi
@@ -51,12 +52,16 @@ live_scan_networks() {
     fi
 
     dialog --title "Escaneo en Vivo" --infobox "Escaneando redes durante 60 segundos..." 8 40
-    xterm -geometry 80x24+0+0 -hold -e "airodump-ng $interface --output-format csv --write $RESULTS_DIR/live_scan" &
+
+    # Ejecutar airodump-ng y guardar log de errores
+    xterm -geometry 80x24+0+0 -hold -e "airodump-ng $interface --output-format csv --write $RESULTS_DIR/live_scan" 2> "$RESULTS_DIR/airodump_error.log" &
     sleep 60
     killall airodump-ng
 
     if [[ ! -f "$RESULTS_DIR/live_scan-01.csv" ]]; then
-        dialog --title "Error" --msgbox "El archivo de resultados no se generó. Verifica el proceso de escaneo." 8 40
+        # Mostrar error detallado
+        local error_message=$(cat "$RESULTS_DIR/airodump_error.log")
+        dialog --title "Error" --msgbox "El archivo de resultados no se generó.\nError: $error_message" 15 50
         return
     fi
     show_scan_results "$RESULTS_DIR/live_scan-01.csv"
