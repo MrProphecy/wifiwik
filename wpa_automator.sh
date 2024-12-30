@@ -28,26 +28,51 @@ install_dependencies() {
     done
 
     # Verificar e instalar hcxpcapngtool manualmente
+    install_hcxpcapngtool
+}
+
+# Función: Instalar hcxpcapngtool
+install_hcxpcapngtool() {
     if ! command -v hcxpcapngtool &>/dev/null; then
         dialog --title "Instalación Manual" --infobox "Instalando hcxpcapngtool desde el repositorio oficial..." 8 50
         sleep 2
-        git clone https://github.com/ZerBea/hcxtools.git "$PROJECT_DIR/hcxtools" &>/dev/null
-        cd "$PROJECT_DIR/hcxtools" || exit
-        sudo make &>/dev/null
-        sudo make install &>/dev/null
+
+        # Descargar y compilar hcxtools
+        if [[ ! -d "$PROJECT_DIR/hcxtools" ]]; then
+            git clone https://github.com/ZerBea/hcxtools.git "$PROJECT_DIR/hcxtools" &>/dev/null
+        fi
+
+        cd "$PROJECT_DIR/hcxtools" || {
+            dialog --title "Error" --msgbox "No se pudo acceder al directorio de hcxtools. Revisa la ruta." 8 50
+            exit 1
+        }
+
+        # Compilar y registrar errores si existen
+        sudo make clean &>/dev/null
+        if ! sudo make &>/tmp/hcxtools_make.log; then
+            dialog --title "Error de Compilación" --msgbox "Ocurrió un error al compilar hcxtools. Revisa /tmp/hcxtools_make.log." 8 50
+            exit 1
+        fi
+
+        # Instalar y verificar la instalación
+        if ! sudo make install &>/tmp/hcxtools_install.log; then
+            dialog --title "Error de Instalación" --msgbox "Error al instalar hcxtools. Revisa /tmp/hcxtools_install.log." 8 50
+            exit 1
+        fi
+
         cd - &>/dev/null || exit
+
+        # Verificar si hcxpcapngtool está disponible
         if command -v hcxpcapngtool &>/dev/null; then
             dialog --title "Instalación Exitosa" --msgbox "hcxpcapngtool se instaló correctamente." 8 50
         else
-            dialog --title "Error" --msgbox "No se pudo instalar hcxpcapngtool. Revisa el proceso manualmente." 8 50
+            dialog --title "Error" --msgbox "hcxpcapngtool no se pudo instalar correctamente. Inténtalo manualmente." 8 50
             exit 1
         fi
     fi
-
-    dialog --title "Dependencias" --msgbox "Todas las dependencias están instaladas correctamente." 8 50
 }
 
-# Función: Crear carpetas del proyecto
+# Crear carpetas del proyecto
 prepare_project_directory() {
     mkdir -p "$PROJECT_DIR" "$RESULTS_DIR" 2>/dev/null
 }
