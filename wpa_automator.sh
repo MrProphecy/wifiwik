@@ -14,7 +14,15 @@ PROJECT_DIR="$DOWNLOADS_DIR/$PROJECT_NAME"
 RESULTS_DIR="$PROJECT_DIR/resultados_wifi"
 DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip" "hashcat" "dialog")
 
-# Verificar e instalar dependencias
+# Verificar permisos administrativos
+check_permissions() {
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${RED}Este script debe ejecutarse como administrador. Usa 'sudo'.${NC}"
+        exit 1
+    fi
+}
+
+# Función para instalar dependencias
 install_dependencies() {
     dialog --title "Instalación de Dependencias" --infobox "Verificando dependencias..." 8 40
     for dep in "${DEPENDENCIES[@]}"; do
@@ -34,28 +42,52 @@ prepare_project_directory() {
     mkdir -p "$PROJECT_DIR" "$RESULTS_DIR" 2>/dev/null
 }
 
-# Escaneo en vivo de redes WiFi con ventana posicionada
+# Poner la interfaz en modo monitor
+enable_monitor_mode() {
+    local interface=$(detect_wireless_interface)
+    if [[ -z "$interface" ]]; then
+        dialog --title "Error" --msgbox "No se detectó ninguna interfaz inalámbrica." 8 40
+        exit 1
+    fi
+
+    dialog --title "Modo Monitor" --infobox "Activando modo monitor en $interface..." 8 40
+    airmon-ng start "$interface" &>/dev/null || {
+        dialog --title "Error" --msgbox "No se pudo activar el modo monitor en $interface." 8 40
+        exit 1
+    }
+}
+
+# Detectar interfaz inalámbrica
+detect_wireless_interface() {
+    iw dev | grep Interface | awk '{print $2}' | head -n 1
+}
+
+# Escaneo en vivo de redes WiFi
 live_scan_networks() {
     local interface=$(detect_wireless_interface)
     if [[ -z "$interface" ]]; then
-        dialog --title "Error" --msgbox "No se encontró una interfaz inalámbrica compatible." 8 40
-        return
+        dialog --title "Error" --msgbox "No se detectó ninguna interfaz inalámbrica." 8 40
+        exit 1
+    fi
+
+    if [[ ! -d "$RESULTS_DIR" ]]; then
+        mkdir -p "$RESULTS_DIR"
     fi
 
     dialog --title "Escaneo en Vivo" --infobox "Escaneando redes en tiempo real..." 8 40
-    xterm -geometry 80x24+0+0 -hold -e "airodump-ng $interface --output-format cap --write $RESULTS_DIR/live_scan" &
+    xterm -geometry 80x24+0+0 -hold -e "airodump-ng $interface --output-format csv --write $RESULTS_DIR/live_scan" &
     sleep 60
     killall airodump-ng
 
-    if [[ ! -f "$RESULTS_DIR/live_scan-01.cap" ]]; then
+    local cap_file="$RESULTS_DIR/live_scan-01.cap"
+    if [[ -f "$cap_file" ]]; then
+        show_scan_results "$cap_file"
+    else
         dialog --title "Error" --msgbox "El archivo live_scan-01.cap no se generó. Verifica el proceso de escaneo." 8 40
-        return
     fi
-
-    show_scan_results "$RESULTS_DIR/live_scan-01.cap"
 }
 
-# Mostrar resultados del escaneo en vivo
+# Mostrar resultados del escaneo
 show_scan_results() {
     local scan_file=$1
     if [[ -f "$scan_file" ]]; then
@@ -63,11 +95,6 @@ show_scan_results() {
     else
         dialog --title "Error" --msgbox "No se encontraron resultados de escaneo." 8 40
     fi
-}
-
-# Detectar interfaz inalámbrica
-detect_wireless_interface() {
-    iw dev | grep Interface | awk '{print $2}' | head -n 1
 }
 
 # Analizar y mostrar redes encontradas
@@ -139,14 +166,14 @@ main_menu() {
     while true; do
         option=$(dialog --title "WiFi Toolkit" --menu "Selecciona una opción:" 20 60 10 \
             1 "Instalar dependencias" \
-            2 "Escaneo en vivo de redes" \
-            3 "Listar y analizar redes" \
+            2 "Habilitar modo monitor" \
+            3 "Escaneo en vivo de redes" \
             4 "Salir" 3>&1 1>&2 2>&3)
 
         case $option in
             1) install_dependencies ;;
-            2) live_scan_networks ;;
-            3) show_scan_results "$RESULTS_DIR/live_scan-01.cap" ;;
+            2) enable_monitor_mode ;;
+            3) live_scan_networks ;;
             4) clear; exit 0 ;;
             *) dialog --title "Error" --msgbox "Opción no válida." 8 40 ;;
         esac
@@ -154,6 +181,6 @@ main_menu() {
 }
 
 # Inicio del script
-install_dependencies
+check_permissions
 prepare_project_directory
 main_menu
