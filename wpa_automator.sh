@@ -11,7 +11,7 @@ PROJECT_NAME="wifi_toolkit"
 DOWNLOADS_DIR="$HOME/Downloads"
 PROJECT_DIR="$DOWNLOADS_DIR/$PROJECT_NAME"
 RESULTS_DIR="$PROJECT_DIR/resultados_wifi"
-DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip" "hashcat" "dialog" "hcxpcapngtool")
+DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip" "hashcat" "dialog" "make" "gcc")
 
 # Función: Instalar dependencias
 install_dependencies() {
@@ -21,19 +21,29 @@ install_dependencies() {
         if ! command -v "$dep" &>/dev/null; then
             dialog --title "Instalación de Dependencia" --infobox "Instalando $dep..." 8 50
             if ! sudo apt-get install -y "$dep" &>/dev/null; then
-                # Si no se pudo instalar desde repositorio, manejar manualmente
-                if [[ "$dep" == "hcxpcapngtool" ]]; then
-                    dialog --title "Instalación Manual" --infobox "Descargando hcxpcapngtool..." 8 50
-                    git clone https://github.com/ZerBea/hcxtools.git "$PROJECT_DIR/hcxtools" &>/dev/null
-                    cd "$PROJECT_DIR/hcxtools" || exit
-                    sudo make &>/dev/null && sudo make install &>/dev/null
-                    cd - &>/dev/null || exit
-                else
-                    dialog --title "Error" --msgbox "No se pudo instalar $dep. Instálalo manualmente." 8 50
-                fi
+                dialog --title "Error" --msgbox "No se pudo instalar $dep. Instálalo manualmente." 8 50
+                exit 1
             fi
         fi
     done
+
+    # Verificar e instalar hcxpcapngtool manualmente
+    if ! command -v hcxpcapngtool &>/dev/null; then
+        dialog --title "Instalación Manual" --infobox "Instalando hcxpcapngtool desde el repositorio oficial..." 8 50
+        sleep 2
+        git clone https://github.com/ZerBea/hcxtools.git "$PROJECT_DIR/hcxtools" &>/dev/null
+        cd "$PROJECT_DIR/hcxtools" || exit
+        sudo make &>/dev/null
+        sudo make install &>/dev/null
+        cd - &>/dev/null || exit
+        if command -v hcxpcapngtool &>/dev/null; then
+            dialog --title "Instalación Exitosa" --msgbox "hcxpcapngtool se instaló correctamente." 8 50
+        else
+            dialog --title "Error" --msgbox "No se pudo instalar hcxpcapngtool. Revisa el proceso manualmente." 8 50
+            exit 1
+        fi
+    fi
+
     dialog --title "Dependencias" --msgbox "Todas las dependencias están instaladas correctamente." 8 50
 }
 
